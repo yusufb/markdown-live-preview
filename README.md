@@ -1,24 +1,54 @@
 # Markdown Live Preview
 
-[Markdown Live Preview](https://markdownlivepreview.com/) is a tiny web tool to preview Markdown formatted text.
+A local-first fork of [tanabe/markdown-live-preview](https://github.com/tanabe/markdown-live-preview)
 
-## Setup
+## Key Features
 
-```
-$ make setup
+- **Multi-Tab Editor**: Open multiple files or scratchpads simultaneously in a tabbed interface.
+- **Local File System Support**: Read and write files directly from your local disk via a custom Vite server plugin.
+- **URL Hash Navigation**: Open specific local files directly via URL (e.g., `http://localhost:41773/#~/docs/notes.md`).
+- **Syntax Highlighting**: Beautiful code blocks with `highlight.js`, automatically switching between light and dark themes.
+- **Persistent Workspace**: Your open tabs, active file, and even the editor/preview split ratio are saved between sessions.
+- **Bidirectional Scroll Sync**: Perfectly synchronized scrolling between the editor and the preview.
+- **Privacy Focused**: All Google Analytics tracking has been removed.
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v18+)
+- npm
+
+### Installation
+
+```bash
+# Install dependencies
+make setup
 ```
 
-## Build
+### Local Development
 
-```
-$ make build
+Start the development server with local file system access enabled:
+
+```bash
+make dev
 ```
 
-## Local Development
+The application will be available at `http://localhost:41773`.
 
+### Building for Production
+
+```bash
+make build
 ```
-$ make dev
-```
+
+## Usage Tips
+
+- **Open File**: Type a path (e.g., `~/Desktop/notes.md`) into the file path input in the header.
+- **Save**: Use the "Save" button to write changes back to the local file.
+- **Scratchpads**: Click the `+` button in the tab bar to create a temporary scratchpad.
+- **Sync Scroll**: Toggle bidirectional scroll synchronization in the header.
 
 ## License
-See the [LICENSE](https://github.com/tanabe/markdown-live-preview/blob/master/LICENSE) file in this repo.
+
+See the [LICENSE](LICENSE) file for details.
