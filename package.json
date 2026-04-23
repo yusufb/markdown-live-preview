@@ -29,7 +29,9 @@
   "dependencies": {
     "dompurify": "^3.4.0",
     "github-markdown-css": "^5.8.1",
+    "highlight.js": "^11.11.1",
     "marked": "^15.0.7",
+    "marked-highlight": "^2.2.4",
     "monaco-editor": "^0.52.2",
     "storehouse-js": "github:tanabe/Storehouse-js"
   }
