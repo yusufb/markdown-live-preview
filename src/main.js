@@ -1,7 +1,25 @@
 import Storehouse from 'storehouse-js';
 import * as monaco from 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/+esm';
 import { marked } from 'marked';
+import { markedHighlight } from 'marked-highlight';
+import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
+
+// ----- config -----
+const CONFIG = {
+    showExportPdf: false,
+    scratchSaveDir: '~/Downloads',
+};
+
+marked.use(markedHighlight({
+    langPrefix: 'hljs language-',
+    highlight(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+            return hljs.highlight(code, { language: lang }).value;
+        }
+        return hljs.highlightAuto(code).value;
+    }
+}));
 
 const init = () => {
     let hasEdited = false;
@@ -11,7 +29,15 @@ const init = () => {
     const localStorageKey = 'last_state';
     const localStorageScrollBarKey = 'scroll_bar_settings';
     const localStorageThemeKey = 'theme_settings';
-    const confirmationMessage = 'Are you sure you want to reset? Your changes will be lost.';
+    const localStorageDividerKey = 'divider_ratio';
+    const localStorageTabsKey = 'tabs';
+    const localStorageActiveTabKey = 'active_tab';
+
+    // ----- tab state -----
+    let tabs = [];
+    let activeTabId = null;
+    let dirtyTabs = new Set();
+    let suppressDirty = false;
     // default template
     const defaultInput = `# Markdown syntax guide
 
@@ -115,14 +141,26 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             }
             let value = editor.getValue();
             convert(value);
-            saveLastContent(value);
+            let current = getActiveTab();
+            if (!current) return;
+            if (current.filePath) {
+                if (!suppressDirty && !dirtyTabs.has(current.id)) {
+                    dirtyTabs.add(current.id);
+                    renderTabs();
+                }
+            } else {
+                saveScratchContent(current.id, value);
+            }
         });
 
+        let scrollSource = null;
+
         editor.onDidScrollChange((e) => {
-            if (!scrollBarSync) {
+            if (!scrollBarSync || scrollSource === 'preview') {
                 return;
             }
 
+            scrollSource = 'editor';
             const scrollTop = e.scrollTop;
             const scrollHeight = e.scrollHeight;
             const height = editor.getLayoutInfo().height;
@@ -133,6 +171,23 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             let previewElement = document.querySelector('#preview');
             let targetY = (previewElement.scrollHeight - previewElement.clientHeight) * scrollRatio;
             previewElement.scrollTo(0, targetY);
+            requestAnimationFrame(() => { scrollSource = null; });
+        });
+
+        let previewElement = document.querySelector('#preview');
+        previewElement.addEventListener('scroll', () => {
+            if (!scrollBarSync || scrollSource === 'editor') {
+                return;
+            }
+
+            scrollSource = 'preview';
+            const scrollRatio = previewElement.scrollTop / (previewElement.scrollHeight - previewElement.clientHeight);
+
+            const scrollHeight = editor.getScrollHeight();
+            const height = editor.getLayoutInfo().height;
+            const maxScrollTop = scrollHeight - height;
+            editor.setScrollTop(scrollRatio * maxScrollTop);
+            requestAnimationFrame(() => { scrollSource = null; });
         });
 
         return editor;
@@ -145,30 +200,332 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             mangle: false
         };
         let html = marked.parse(markdown, options);
-        let sanitized = DOMPurify.sanitize(html);
+        let sanitized = DOMPurify.sanitize(html, { ADD_ATTR: ['class'] });
         document.querySelector('#output').innerHTML = sanitized;
     };
 
-    // Reset input text
-    let reset = () => {
-        let changed = editor.getValue() != defaultInput;
-        if (hasEdited || changed) {
-            var confirmed = window.confirm(confirmationMessage);
-            if (!confirmed) {
-                return;
-            }
-        }
-        presetValue(defaultInput);
-        document.querySelectorAll('.column').forEach((element) => {
-            element.scrollTo({ top: 0 });
-        });
-    };
-
     let presetValue = (value) => {
+        suppressDirty = true;
         editor.setValue(value);
         editor.revealPosition({ lineNumber: 1, column: 1 });
         editor.focus();
         hasEdited = false;
+        suppressDirty = false;
+    };
+
+    // ----- tab system -----
+
+    let getFilename = (filePath) => filePath.split('/').pop() || filePath;
+
+    let getActiveTab = () => tabs.find((t) => t.id === activeTabId) || null;
+
+    let nextScratchLabel = () => {
+        let n = 1;
+        let existing = new Set(tabs.filter((t) => !t.filePath).map((t) => t.label));
+        while (existing.has('Tab ' + n)) n++;
+        return 'Tab ' + n;
+    };
+
+    let saveTabList = () => {
+        let expiredAt = new Date(2099, 1, 1);
+        let persisted = tabs.map((t) => ({ id: t.id, filePath: t.filePath, label: t.label }));
+        Storehouse.setItem(localStorageNamespace, localStorageTabsKey, JSON.stringify(persisted), expiredAt);
+        Storehouse.setItem(localStorageNamespace, localStorageActiveTabKey, activeTabId, expiredAt);
+    };
+
+    let loadTabList = () => {
+        let raw = Storehouse.getItem(localStorageNamespace, localStorageTabsKey);
+        if (!raw) return [];
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            return [];
+        }
+    };
+
+    let loadScratchContent = (tabId) => {
+        return Storehouse.getItem(localStorageNamespace, 'tab_content_' + tabId);
+    };
+
+    let saveScratchContent = (tabId, content) => {
+        let expiredAt = new Date(2099, 1, 1);
+        Storehouse.setItem(localStorageNamespace, 'tab_content_' + tabId, content, expiredAt);
+    };
+
+    let removeScratchContent = (tabId) => {
+        Storehouse.deleteItem(localStorageNamespace, 'tab_content_' + tabId);
+    };
+
+    let renderTabs = () => {
+        let tabBar = document.querySelector('#tab-bar');
+        if (!tabBar) return;
+        tabBar.innerHTML = '';
+        tabs.forEach((tab) => {
+            let isDirty = dirtyTabs.has(tab.id);
+            let el = document.createElement('div');
+            el.className = 'tab' + (tab.id === activeTabId ? ' active' : '') + (isDirty ? ' dirty' : '');
+            el.title = tab.filePath || tab.label;
+
+            let label = document.createElement('span');
+            label.className = 'tab-label';
+            label.textContent = (isDirty ? '*' : '') + tab.label;
+            el.appendChild(label);
+
+            let close = document.createElement('span');
+            close.className = 'tab-close';
+            close.textContent = '\u00d7';
+            close.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeTab(tab.id);
+            });
+            el.appendChild(close);
+
+            el.addEventListener('click', () => {
+                if (tab.id !== activeTabId) switchToTab(tab.id);
+            });
+
+            tabBar.appendChild(el);
+        });
+
+        let addBtn = document.createElement('div');
+        addBtn.className = 'tab tab-add';
+        addBtn.textContent = '+';
+        addBtn.title = 'New tab';
+        addBtn.addEventListener('click', () => openScratchTab());
+        tabBar.appendChild(addBtn);
+    };
+
+    let saveCurrentTabContent = () => {
+        let current = getActiveTab();
+        if (current && !current.filePath) {
+            saveScratchContent(current.id, editor.getValue());
+        }
+    };
+
+    let fetchFileContent = async (filePath) => {
+        const response = await fetch('/api/read-file?path=' + encodeURIComponent(filePath));
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Unknown error');
+        }
+        return { content: data.content, resolvedPath: data.resolvedPath || filePath };
+    };
+
+    let writeFileContent = async (filePath, content) => {
+        const response = await fetch('/api/write-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath, content: content })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Unknown error');
+        }
+    };
+
+    let saveActiveTab = async () => {
+        let current = getActiveTab();
+        if (!current) return;
+
+        if (current.filePath) {
+            // file tab - write to disk
+            try {
+                await writeFileContent(current.filePath, editor.getValue());
+                dirtyTabs.delete(current.id);
+                renderTabs();
+            } catch (err) {
+                window.alert('Failed to save file: ' + err.message);
+            }
+        } else {
+            // scratch tab - download as .md file and convert to file tab
+            let now = new Date();
+            let pad = (n) => String(n).padStart(2, '0');
+            let filename = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+                + '-' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '-' + pad(now.getSeconds()) + '.md';
+
+            // trigger browser download
+            let blob = new Blob([editor.getValue()], { type: 'text/markdown' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            // save to disk and convert scratch to file tab
+            let savePath = CONFIG.scratchSaveDir + '/' + filename;
+            try {
+                await writeFileContent(savePath, editor.getValue());
+                let oldId = current.id;
+                removeScratchContent(oldId);
+                current.filePath = savePath;
+                current.label = filename;
+                current.id = savePath;
+                activeTabId = savePath;
+                window.location.hash = encodeURIComponent(savePath);
+                let input = document.querySelector('#file-path-input');
+                if (input) input.value = savePath;
+                document.title = filename + ' - Markdown Live Preview';
+                saveTabList();
+                renderTabs();
+            } catch (err) {
+                window.alert('Failed to save file to disk: ' + err.message);
+            }
+        }
+    };
+
+    let scratchHasContent = (tabId) => {
+        let tab = tabs.find((t) => t.id === tabId);
+        if (!tab || tab.filePath) return false;
+        let content = loadScratchContent(tabId);
+        return content !== null && content !== undefined && content.trim() !== '';
+    };
+
+    let hasUnsavedChanges = (tabId) => {
+        if (dirtyTabs.has(tabId)) return true;
+        return scratchHasContent(tabId);
+    };
+
+    // Returns true if it's ok to proceed, false if cancelled
+    let confirmDirtyTab = async (tabId) => {
+        let tab = tabs.find((t) => t.id === tabId);
+        if (!tab) return true;
+
+        if (tab.filePath && dirtyTabs.has(tabId)) {
+            let save = window.confirm('Save changes to ' + tab.label + '?');
+            if (save) {
+                try {
+                    await writeFileContent(tab.filePath, editor.getValue());
+                    dirtyTabs.delete(tabId);
+                    renderTabs();
+                } catch (err) {
+                    window.alert('Failed to save file: ' + err.message);
+                    return false;
+                }
+            } else {
+                dirtyTabs.delete(tabId);
+            }
+        } else if (!tab.filePath && scratchHasContent(tabId)) {
+            let save = window.confirm('Save content of ' + tab.label + '?');
+            if (save) {
+                await saveActiveTab();
+            }
+        }
+        return true;
+    };
+
+    let switchToTab = async (tabId) => {
+        if (activeTabId && activeTabId !== tabId) {
+            let ok = await confirmDirtyTab(activeTabId);
+            if (!ok) return;
+        }
+        saveCurrentTabContent();
+        activeTabId = tabId;
+        let tab = getActiveTab();
+        if (!tab) return;
+
+        if (tab.filePath) {
+            try {
+                let result = await fetchFileContent(tab.filePath);
+                presetValue(result.content);
+                // update tab if path was normalised by server
+                if (result.resolvedPath !== tab.filePath) {
+                    tab.filePath = result.resolvedPath;
+                    tab.id = result.resolvedPath;
+                    tab.label = getFilename(result.resolvedPath);
+                    activeTabId = result.resolvedPath;
+                    saveTabList();
+                }
+            } catch (err) {
+                window.alert('Failed to load file: ' + err.message);
+            }
+            window.location.hash = encodeURIComponent(tab.filePath);
+            let input = document.querySelector('#file-path-input');
+            if (input) input.value = tab.filePath;
+        } else {
+            let content = loadScratchContent(tab.id);
+            presetValue(content !== null && content !== undefined ? content : '');
+            window.location.hash = '';
+            let input = document.querySelector('#file-path-input');
+            if (input) input.value = '';
+        }
+
+        document.title = tab.label + ' - Markdown Live Preview';
+        saveTabList();
+        renderTabs();
+    };
+
+    let openFileTab = async (filePath) => {
+        let existing = tabs.find((t) => t.filePath === filePath);
+        if (existing) {
+            await switchToTab(existing.id);
+            return;
+        }
+
+        let tab = { id: filePath, filePath: filePath, label: getFilename(filePath) };
+        tabs.push(tab);
+        saveTabList();
+        await switchToTab(tab.id);
+    };
+
+    let openScratchTab = () => {
+        let tab = {
+            id: crypto.randomUUID(),
+            filePath: null,
+            label: nextScratchLabel()
+        };
+        tabs.push(tab);
+        saveScratchContent(tab.id, '');
+        saveTabList();
+        switchToTab(tab.id);
+    };
+
+    let closeTab = async (tabId) => {
+        let idx = tabs.findIndex((t) => t.id === tabId);
+        if (idx === -1) return;
+        let tab = tabs[idx];
+
+        // check dirty state for file tabs
+        if (dirtyTabs.has(tabId) && tab.filePath) {
+            let save = window.confirm('Save changes to ' + tab.label + '?');
+            if (save) {
+                try {
+                    await writeFileContent(tab.filePath, editor.getValue());
+                } catch (err) {
+                    window.alert('Failed to save file: ' + err.message);
+                    return;
+                }
+            }
+            dirtyTabs.delete(tabId);
+        }
+
+        // check scratch tabs with content
+        if (!tab.filePath && scratchHasContent(tabId)) {
+            let save = window.confirm('Save content of ' + tab.label + '?');
+            if (save) {
+                await saveActiveTab();
+            }
+        }
+
+        // clean up scratch content
+        if (!tab.filePath) {
+            removeScratchContent(tab.id);
+        }
+
+        tabs.splice(idx, 1);
+
+        if (tabs.length === 0) {
+            openScratchTab();
+            return;
+        }
+
+        if (activeTabId === tabId) {
+            let nextIdx = Math.min(idx, tabs.length - 1);
+            await switchToTab(tabs[nextIdx].id);
+        } else {
+            saveTabList();
+            renderTabs();
+        }
     };
 
     // ----- sync scroll position -----
@@ -208,6 +565,26 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         }
     };
 
+    // ----- highlight.js CSS loader -----
+    const HLJS_CSS_LIGHT = 'css/hljs-github-light.css?v=1.11.0';
+    const HLJS_CSS_DARK = 'css/hljs-github-dark.css?v=1.11.0';
+
+    let setHljsCss = (useDark) => {
+        const link = document.getElementById('hljs-theme-link');
+        if (!link) {
+            const newLink = document.createElement('link');
+            newLink.id = 'hljs-theme-link';
+            newLink.rel = 'stylesheet';
+            newLink.href = useDark ? HLJS_CSS_DARK : HLJS_CSS_LIGHT;
+            document.head.appendChild(newLink);
+            return;
+        }
+        const desired = useDark ? HLJS_CSS_DARK : HLJS_CSS_LIGHT;
+        if (link.getAttribute('href') !== desired) {
+            link.setAttribute('href', desired);
+        }
+    };
+
     // ----- theme toggle (dark/light) -----
     let setTheme = (enabled) => {
         document.documentElement.setAttribute('data-theme', enabled ? 'dark' : 'light');
@@ -225,12 +602,14 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         }
         // set preview css to match theme
         setPreviewCss(settings);
+        setHljsCss(settings);
 
         checkbox.addEventListener('change', (event) => {
             let checked = event.currentTarget.checked;
             setTheme(checked);
             saveThemeSettings(checked);
             setPreviewCss(checked);
+            setHljsCss(checked);
             if (monaco && monaco.editor && typeof monaco.editor.setTheme === 'function') {
                 monaco.editor.setTheme(checked ? 'vs-dark' : 'vs');
             }
@@ -363,11 +742,39 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     // ----- setup -----
 
+    // Refresh file content (re-read from disk)
+    let refreshFile = async () => {
+        let current = getActiveTab();
+        if (!current || !current.filePath) return;
+
+        if (dirtyTabs.has(current.id)) {
+            let save = window.confirm('Save changes to ' + current.label + ' before refreshing?');
+            if (save) {
+                try {
+                    await writeFileContent(current.filePath, editor.getValue());
+                } catch (err) {
+                    window.alert('Failed to save file: ' + err.message);
+                    return;
+                }
+            }
+            dirtyTabs.delete(current.id);
+        }
+
+        presetValue('');
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        try {
+            let result = await fetchFileContent(current.filePath);
+            presetValue(result.content);
+        } catch (err) {
+            window.alert('Failed to refresh file: ' + err.message);
+        }
+    };
+
     // setup navigation actions
-    let setupResetButton = () => {
-        document.querySelector("#reset-button").addEventListener('click', (event) => {
+    let setupRefreshButton = () => {
+        document.querySelector("#refresh-button").addEventListener('click', (event) => {
             event.preventDefault();
-            reset();
+            refreshFile();
         });
     };
 
@@ -384,14 +791,40 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
+    let setupSaveButton = () => {
+        document.querySelector("#save-button").addEventListener('click', (event) => {
+            event.preventDefault();
+            saveActiveTab();
+        });
+    };
+
     let setupExportButton = () => {
         const exportButton = document.querySelector('#export-button');
         if (!exportButton) {
             return;
         }
+        if (!CONFIG.showExportPdf) {
+            exportButton.style.display = 'none';
+            return;
+        }
         exportButton.addEventListener('click', (event) => {
             event.preventDefault();
             exportPreviewToPdf();
+        });
+    };
+
+    let loadFileFromPath = async (filePath) => {
+        await openFileTab(filePath);
+    };
+
+    let setupFilePathInput = () => {
+        const input = document.querySelector('#file-path-input');
+        if (!input) return;
+        input.addEventListener('keydown', async (event) => {
+            if (event.key !== 'Enter') return;
+            const filePath = input.value.trim();
+            if (!filePath) return;
+            loadFileFromPath(filePath);
         });
     };
 
@@ -442,12 +875,32 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         }
     };
 
+    let loadDividerRatio = () => {
+        return Storehouse.getItem(localStorageNamespace, localStorageDividerKey);
+    };
+
+    let saveDividerRatio = (ratio) => {
+        let expiredAt = new Date(2099, 1, 1);
+        Storehouse.setItem(localStorageNamespace, localStorageDividerKey, ratio, expiredAt);
+    };
+
     let setupDivider = () => {
-        let lastLeftRatio = 0.5;
+        const savedRatio = parseFloat(loadDividerRatio());
+        let lastLeftRatio = (savedRatio && savedRatio > 0 && savedRatio < 1) ? savedRatio : 0.5;
         const divider = document.getElementById('split-divider');
         const leftPane = document.getElementById('edit');
         const rightPane = document.getElementById('preview');
         const container = document.getElementById('container');
+
+        // apply saved ratio
+        if (savedRatio && savedRatio > 0 && savedRatio < 1) {
+            const containerRect = container.getBoundingClientRect();
+            const totalWidth = containerRect.width;
+            const dividerWidth = divider.offsetWidth;
+            const availableWidth = totalWidth - dividerWidth;
+            leftPane.style.width = (availableWidth * lastLeftRatio) + 'px';
+            rightPane.style.width = (availableWidth * (1 - lastLeftRatio)) + 'px';
+        }
 
         let isDragging = false;
 
@@ -475,6 +928,8 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
             leftPane.style.width = halfWidth + 'px';
             rightPane.style.width = halfWidth + 'px';
+            lastLeftRatio = 0.5;
+            saveDividerRatio(lastLeftRatio);
         });
 
         document.addEventListener('mousemove', (e) => {
@@ -501,6 +956,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                 divider.classList.remove('hover');
                 document.body.style.cursor = 'default';
                 document.body.style.userSelect = '';
+                saveDividerRatio(lastLeftRatio);
             }
         });
 
@@ -519,16 +975,50 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     };
 
     // ----- entry point -----
-    let lastContent = loadLastContent();
     let editor = setupEditor();
-    if (lastContent) {
-        presetValue(lastContent);
-    } else {
-        presetValue(defaultInput);
+
+    // restore tabs from localStorage
+    let persistedTabs = loadTabList();
+    let persistedActiveId = Storehouse.getItem(localStorageNamespace, localStorageActiveTabKey);
+
+    if (persistedTabs.length > 0) {
+        tabs = persistedTabs.map((t) => ({ id: t.id, filePath: t.filePath, label: t.label }));
     }
-    setupResetButton();
+
+    let rawHash = window.location.hash.slice(1);
+    let hashPath = '';
+    if (rawHash) {
+        try { hashPath = decodeURIComponent(rawHash); } catch (e) { hashPath = rawHash; }
+    }
+
+    // set initial content before async tab switching
+    presetValue(defaultInput);
+
+    setupRefreshButton();
     setupCopyButton(editor);
+    setupSaveButton();
     setupExportButton();
+    setupFilePathInput();
+
+    // initialise tabs
+    if (hashPath) {
+        openFileTab(hashPath);
+    } else if (tabs.length > 0) {
+        let startId = (persistedActiveId && tabs.find((t) => t.id === persistedActiveId))
+            ? persistedActiveId
+            : tabs[0].id;
+        switchToTab(startId);
+    } else {
+        // fresh start - migrate old last_state if present
+        let lastContent = loadLastContent();
+        let tab = { id: crypto.randomUUID(), filePath: null, label: nextScratchLabel() };
+        tabs.push(tab);
+        saveScratchContent(tab.id, lastContent || defaultInput);
+        activeTabId = tab.id;
+        presetValue(lastContent || defaultInput);
+        saveTabList();
+        renderTabs();
+    }
 
     let scrollBarSettings = loadScrollBarSettings() || false;
     initScrollBarSync(scrollBarSettings);
@@ -544,6 +1034,17 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     initThemeToggle(themeSettings);
 
     setupDivider();
+
+    window.addEventListener('beforeunload', (e) => {
+        if (dirtyTabs.size > 0) {
+            e.preventDefault();
+            return;
+        }
+        let hasScratchContent = tabs.some((t) => !t.filePath && scratchHasContent(t.id));
+        if (hasScratchContent) {
+            e.preventDefault();
+        }
+    });
 };
 
 window.addEventListener("load", () => {
