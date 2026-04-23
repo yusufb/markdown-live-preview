@@ -1,9 +1,10 @@
 import Storehouse from 'storehouse-js';
-import * as monaco from 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/+esm';
+import * as monaco from 'monaco-editor';
 import { marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
+import html2pdf from 'html2pdf.js';
 
 // ----- config -----
 const CONFIG = {
@@ -677,7 +678,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             return;
         }
 
-        if (typeof window.html2pdf !== 'function') {
+        if (typeof html2pdf !== 'function') {
             window.alert('PDF export is not available yet. Please try again in a moment.');
             return;
         }
@@ -729,7 +730,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
-            window.html2pdf()
+            html2pdf()
                 .set(options)
                 .from(previewElement)
                 .save()
