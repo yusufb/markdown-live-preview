@@ -66,4 +66,8 @@ node_modules/
 
 # dotenv environment variables file
 .env
+local/
+
+# Vite cache
+.vite/
 

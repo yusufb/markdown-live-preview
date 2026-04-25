@@ -107,5 +107,6 @@ export default defineConfig({
   plugins: [localFileReaderPlugin()],
   server: {
     port: 41773,
+    strictPort: true,
   },
 });
