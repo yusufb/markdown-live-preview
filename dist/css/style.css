@@ -61,11 +61,19 @@ header a:hover {
     display: flex;
 }
 
+#refresh-button {
+    margin-left: 16px;
+}
+
 #reset-button {
     margin-left: 16px;
 }
 
 #copy-button {
+    margin-left: 16px;
+}
+
+#save-button {
     margin-left: 16px;
 }
 
@@ -79,6 +87,41 @@ header a:hover {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
+}
+
+#file-path-input-wrapper {
+    margin-left: 16px;
+    display: flex;
+    align-items: center;
+}
+
+#file-path-input {
+    background-color: #555;
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-family: monospace;
+    width: 440px;
+    outline: none;
+}
+
+#file-path-input:focus {
+    border-color: #888;
+}
+
+#file-path-input::placeholder {
+    color: #999;
+}
+
+[data-theme="dark"] #file-path-input {
+    background-color: #2a2a2a;
+    border-color: #555;
+}
+
+[data-theme="dark"] #file-path-input:focus {
+    border-color: #777;
 }
 
 header input[type="checkbox"] {
@@ -99,6 +142,72 @@ header input[type="checkbox"] {
 #github a {
   display: block;
   width: 16px;
+}
+
+#tab-bar {
+  display: flex;
+  background-color: #555;
+  min-height: 28px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  scrollbar-width: thin;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px 4px 12px;
+  cursor: pointer;
+  color: #ccc;
+  border-right: 1px solid #666;
+  max-width: 180px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.tab:hover {
+  background-color: #666;
+}
+
+.tab.active {
+  background-color: #777;
+  color: #fff;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  margin-left: 8px;
+  cursor: pointer;
+  opacity: 0.5;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tab-close:hover {
+  opacity: 1;
+}
+
+.tab-add {
+  padding: 4px 12px;
+  color: #999;
+  font-size: 16px;
+  border-right: none;
+}
+
+.tab-add:hover {
+  color: #fff;
+}
+
+.tab.dirty .tab-label {
+  font-style: italic;
 }
 
 footer {
@@ -204,6 +313,24 @@ footer {
 
 [data-theme="dark"] .split-divider.active {
   background: #768390;
+}
+
+[data-theme="dark"] #tab-bar {
+  background-color: #1e1e1e;
+}
+
+[data-theme="dark"] .tab {
+  color: #999;
+  border-right-color: #333;
+}
+
+[data-theme="dark"] .tab:hover {
+  background-color: #2a2a2a;
+}
+
+[data-theme="dark"] .tab.active {
+  background-color: #333;
+  color: #e6edf3;
 }
 
 [data-theme="dark"] footer {
