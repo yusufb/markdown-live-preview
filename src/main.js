@@ -406,11 +406,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             } else {
                 dirtyTabs.delete(tabId);
             }
-        } else if (!tab.filePath && scratchHasContent(tabId)) {
-            let save = window.confirm('Save content of ' + tab.label + '?');
-            if (save) {
-                await saveActiveTab();
-            }
         }
         return true;
     };
