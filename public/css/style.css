@@ -391,6 +391,33 @@ dialog.custom-dialog::backdrop {
   font-size: 14px;
 }
 
+.dialog-input-container {
+  margin-bottom: 24px;
+}
+
+.dialog-input {
+  width: 100%;
+  padding: 5px 12px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-fg-default);
+  vertical-align: middle;
+  background-color: var(--color-canvas-default);
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  outline: none;
+  box-shadow: var(--color-primer-shadow-inset);
+  box-sizing: border-box;
+}
+
+.dialog-input:focus {
+  border-color: var(--color-accent-fg);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

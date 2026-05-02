@@ -50,9 +50,64 @@ const customConfirm = (message, confirmText = 'Confirm', cancelText = 'Cancel') 
         document.body.appendChild(dialog);
         dialog.showModal();
 
-        dialog.querySelector('#confirm').onclick = () => { resolve(true); dialog.close(); dialog.remove(); };
-        dialog.querySelector('#cancel').onclick = () => { resolve(false); dialog.close(); dialog.remove(); };
-        dialog.onclose = () => { if (document.body.contains(dialog)) { resolve(false); dialog.remove(); } };
+        const onConfirm = () => { resolve(true); dialog.close(); dialog.remove(); };
+        const onCancel = () => { resolve(false); dialog.close(); dialog.remove(); };
+
+        dialog.querySelector('#confirm').onclick = onConfirm;
+        dialog.querySelector('#cancel').onclick = onCancel;
+        dialog.onclose = onCancel;
+    });
+};
+
+const customPrompt = (message, defaultValue = '') => {
+    return new Promise((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'custom-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-container">
+                <p class="dialog-message">${escapeHtml(message)}</p>
+                <div class="dialog-input-container">
+                    <input type="text" id="prompt-input" class="dialog-input" value="${escapeHtml(defaultValue)}">
+                </div>
+                <div class="dialog-actions">
+                    <button id="cancel" class="dialog-button dialog-button-default">Cancel</button>
+                    <button id="confirm" class="dialog-button dialog-button-primary">OK</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(dialog);
+        dialog.showModal();
+
+        const input = dialog.querySelector('#prompt-input');
+        input.focus();
+        input.select();
+
+        const onConfirm = () => {
+            const value = input.value;
+            resolve(value);
+            dialog.close();
+            dialog.remove();
+        };
+
+        const onCancel = () => {
+            resolve(null);
+            dialog.close();
+            dialog.remove();
+        };
+
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onConfirm();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                onCancel();
+            }
+        };
+
+        dialog.querySelector('#confirm').onclick = onConfirm;
+        dialog.querySelector('#cancel').onclick = onCancel;
+        dialog.onclose = onCancel;
     });
 };
 
@@ -453,28 +508,39 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         }
     };
 
-    let saveActiveTab = async () => {
-        let current = getActiveTab();
-        if (!current) return;
+    let saveTab = async (tabId) => {
+        let tab = tabs.find((t) => t.id === tabId);
+        if (!tab) return false;
 
-        if (current.filePath) {
+        let content = (tab.id === activeTabId) ? editor.getValue() : loadScratchContent(tab.id);
+
+        if (tab.filePath) {
             // file tab - write to disk
             try {
-                await writeFileContent(current.filePath, editor.getValue());
-                dirtyTabs.delete(current.id);
+                await writeFileContent(tab.filePath, content);
+                dirtyTabs.delete(tab.id);
                 renderTabs();
+                return true;
             } catch (err) {
                 await customAlert('Failed to save file: ' + err.message);
+                return false;
             }
         } else {
             // scratch tab - download as .md file and convert to file tab
             let now = new Date();
             let pad = (n) => String(n).padStart(2, '0');
-            let filename = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+            let defaultFilename = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
                 + '-' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '-' + pad(now.getSeconds()) + '.md';
 
+            let filename = await customPrompt('Enter filename:', defaultFilename);
+            if (!filename) return false;
+
+            if (!filename.toLowerCase().endsWith('.md')) {
+                filename += '.md';
+            }
+
             // trigger browser download
-            let blob = new Blob([editor.getValue()], { type: 'text/markdown' });
+            let blob = new Blob([content], { type: 'text/markdown' });
             let url = URL.createObjectURL(blob);
             let a = document.createElement('a');
             a.href = url;
@@ -485,21 +551,25 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             // save to disk and convert scratch to file tab
             let savePath = CONFIG.scratchSaveDir + '/' + filename;
             try {
-                await writeFileContent(savePath, editor.getValue());
-                let oldId = current.id;
+                await writeFileContent(savePath, content);
+                let oldId = tab.id;
                 removeScratchContent(oldId);
-                current.filePath = savePath;
-                current.label = filename;
-                current.id = savePath;
-                activeTabId = savePath;
-                window.location.hash = encodeURIComponent(savePath);
-                let input = document.querySelector('#file-path-input');
-                if (input) input.value = savePath;
-                document.title = filename + ' - Markdown Live Preview';
+                tab.filePath = savePath;
+                tab.label = filename;
+                tab.id = savePath;
+                if (activeTabId === oldId) {
+                    activeTabId = savePath;
+                    window.location.hash = encodeURIComponent(savePath);
+                    let input = document.querySelector('#file-path-input');
+                    if (input) input.value = savePath;
+                    document.title = filename + ' - Markdown Live Preview';
+                }
                 saveTabList();
                 renderTabs();
+                return true;
             } catch (err) {
                 await customAlert('Failed to save file to disk: ' + err.message);
+                return false;
             }
         }
     };
@@ -628,7 +698,8 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!tab.filePath && scratchHasContent(tabId)) {
             let save = await customConfirm('Save content of ' + tab.label + '?', 'Save', 'Don\'t Save');
             if (save) {
-                await saveActiveTab();
+                let success = await saveTab(tabId);
+                if (!success) return; // Abort closing if save failed or was cancelled
             }
         }
 
@@ -922,7 +993,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     let setupSaveButton = () => {
         document.querySelector("#save-button").addEventListener('click', (event) => {
             event.preventDefault();
-            saveActiveTab();
+            if (activeTabId) saveTab(activeTabId);
         });
     };
 
