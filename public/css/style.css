@@ -1,3 +1,29 @@
+:root {
+  --color-canvas-default: #ffffff;
+  --color-fg-default: #333333;
+  --color-border-default: #d0d7de;
+  --color-btn-bg: #f6f8fa;
+  --color-btn-text: #24292f;
+  --color-btn-hover-bg: #f3f4f6;
+  --color-btn-primary-bg: #2da44e;
+  --color-btn-primary-text: #ffffff;
+  --color-btn-primary-hover-bg: #2c974b;
+  --dialog-backdrop: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] {
+  --color-canvas-default: #212830;
+  --color-fg-default: #e6edf3;
+  --color-border-default: #30363d;
+  --color-btn-bg: #212830;
+  --color-btn-text: #c9d1d9;
+  --color-btn-hover-bg: #30363d;
+  --color-btn-primary-bg: #238636;
+  --color-btn-primary-text: #ffffff;
+  --color-btn-primary-hover-bg: #2ea043;
+  --dialog-backdrop: rgba(0, 0, 0, 0.7);
+}
+
 html, body {
   color: #333;
   overflow-x: hidden;
@@ -335,4 +361,71 @@ footer {
 
 [data-theme="dark"] footer {
   background-color: #333;
+}
+
+/* Custom Dialog Styles */
+dialog.custom-dialog {
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  padding: 0;
+  background: var(--color-canvas-default);
+  color: var(--color-fg-default);
+  max-width: 440px;
+  width: 90%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+dialog.custom-dialog::backdrop {
+  background: var(--dialog-backdrop);
+}
+
+.dialog-container {
+  padding: 16px;
+}
+
+.dialog-message {
+  margin-top: 0;
+  margin-bottom: 24px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-button {
+  padding: 5px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  appearance: none;
+}
+
+.dialog-button-default {
+  color: var(--color-btn-text);
+  background-color: var(--color-btn-bg);
+}
+
+.dialog-button-default:hover {
+  background-color: var(--color-btn-hover-bg);
+}
+
+.dialog-button-primary {
+  color: var(--color-btn-primary-text);
+  background-color: var(--color-btn-primary-bg);
+  border-color: rgba(27, 31, 36, 0.15);
+}
+
+.dialog-button-primary:hover {
+  background-color: var(--color-btn-primary-hover-bg);
 }

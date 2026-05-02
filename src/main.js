@@ -13,6 +13,50 @@ const CONFIG = {
     scratchSaveDir: '~/Downloads',
 };
 
+const customAlert = (message) => {
+    return new Promise((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'custom-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-container">
+                <p class="dialog-message">${escapeHtml(message)}</p>
+                <div class="dialog-actions">
+                    <button id="ok" class="dialog-button dialog-button-primary">OK</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(dialog);
+        dialog.showModal();
+
+        const closeDialog = () => { resolve(); dialog.close(); dialog.remove(); };
+        dialog.querySelector('#ok').onclick = closeDialog;
+        dialog.onclose = closeDialog;
+    });
+};
+
+const customConfirm = (message) => {
+    return new Promise((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'custom-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-container">
+                <p class="dialog-message">${escapeHtml(message)}</p>
+                <div class="dialog-actions">
+                    <button id="cancel" class="dialog-button dialog-button-default">Cancel</button>
+                    <button id="confirm" class="dialog-button dialog-button-primary">Confirm</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(dialog);
+        dialog.showModal();
+
+        dialog.querySelector('#confirm').onclick = () => { resolve(true); dialog.close(); dialog.remove(); };
+        dialog.querySelector('#cancel').onclick = () => { resolve(false); dialog.close(); dialog.remove(); };
+        dialog.onclose = () => { if (document.body.contains(dialog)) { resolve(false); dialog.remove(); } };
+    });
+};
+
+
 const escapeHtml = (unsafe) => {
     return unsafe
         .replace(/&/g, '&amp;')
@@ -420,7 +464,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                 dirtyTabs.delete(current.id);
                 renderTabs();
             } catch (err) {
-                window.alert('Failed to save file: ' + err.message);
+                await customAlert('Failed to save file: ' + err.message);
             }
         } else {
             // scratch tab - download as .md file and convert to file tab
@@ -455,7 +499,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                 saveTabList();
                 renderTabs();
             } catch (err) {
-                window.alert('Failed to save file to disk: ' + err.message);
+                await customAlert('Failed to save file to disk: ' + err.message);
             }
         }
     };
@@ -478,14 +522,14 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!tab) return true;
 
         if (tab.filePath && dirtyTabs.has(tabId)) {
-            let save = window.confirm('Save changes to ' + tab.label + '?');
+            let save = await customConfirm('Save changes to ' + tab.label + '?');
             if (save) {
                 try {
                     await writeFileContent(tab.filePath, editor.getValue());
                     dirtyTabs.delete(tabId);
                     renderTabs();
                 } catch (err) {
-                    window.alert('Failed to save file: ' + err.message);
+                    await customAlert('Failed to save file: ' + err.message);
                     return false;
                 }
             } else {
@@ -518,7 +562,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                     saveTabList();
                 }
             } catch (err) {
-                window.alert('Failed to load file: ' + err.message);
+                await customAlert('Failed to load file: ' + err.message);
             }
             window.location.hash = encodeURIComponent(tab.filePath);
             let input = document.querySelector('#file-path-input');
@@ -568,12 +612,12 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         // check dirty state for file tabs
         if (dirtyTabs.has(tabId) && tab.filePath) {
-            let save = window.confirm('Save changes to ' + tab.label + '?');
+            let save = await customConfirm('Save changes to ' + tab.label + '?');
             if (save) {
                 try {
                     await writeFileContent(tab.filePath, editor.getValue());
                 } catch (err) {
-                    window.alert('Failed to save file: ' + err.message);
+                    await customAlert('Failed to save file: ' + err.message);
                     return;
                 }
             }
@@ -582,7 +626,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         // check scratch tabs with content
         if (!tab.filePath && scratchHasContent(tabId)) {
-            let save = window.confirm('Save content of ' + tab.label + '?');
+            let save = await customConfirm('Save content of ' + tab.label + '?');
             if (save) {
                 await saveActiveTab();
             }
@@ -762,7 +806,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         }
 
         if (typeof html2pdf !== 'function') {
-            window.alert('PDF export is not available yet. Please try again in a moment.');
+            customAlert('PDF export is not available yet. Please try again in a moment.');
             return;
         }
 
@@ -832,12 +876,12 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!current || !current.filePath) return;
 
         if (dirtyTabs.has(current.id)) {
-            let save = window.confirm('Save changes to ' + current.label + ' before refreshing?');
+            let save = await customConfirm('Save changes to ' + current.label + ' before refreshing?');
             if (save) {
                 try {
                     await writeFileContent(current.filePath, editor.getValue());
                 } catch (err) {
-                    window.alert('Failed to save file: ' + err.message);
+                    await customAlert('Failed to save file: ' + err.message);
                     return;
                 }
             }
@@ -850,7 +894,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             let result = await fetchFileContent(current.filePath);
             presetValue(result.content);
         } catch (err) {
-            window.alert('Failed to refresh file: ' + err.message);
+            await customAlert('Failed to refresh file: ' + err.message);
         }
     };
 
