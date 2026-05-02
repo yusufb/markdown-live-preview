@@ -34,7 +34,7 @@ const customAlert = (message) => {
     });
 };
 
-const customConfirm = (message) => {
+const customConfirm = (message, confirmText = 'Confirm', cancelText = 'Cancel') => {
     return new Promise((resolve) => {
         const dialog = document.createElement('dialog');
         dialog.className = 'custom-dialog';
@@ -42,8 +42,8 @@ const customConfirm = (message) => {
             <div class="dialog-container">
                 <p class="dialog-message">${escapeHtml(message)}</p>
                 <div class="dialog-actions">
-                    <button id="cancel" class="dialog-button dialog-button-default">Cancel</button>
-                    <button id="confirm" class="dialog-button dialog-button-primary">Confirm</button>
+                    <button id="cancel" class="dialog-button dialog-button-default">${escapeHtml(cancelText)}</button>
+                    <button id="confirm" class="dialog-button dialog-button-primary">${escapeHtml(confirmText)}</button>
                 </div>
             </div>
         `;
@@ -522,7 +522,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!tab) return true;
 
         if (tab.filePath && dirtyTabs.has(tabId)) {
-            let save = await customConfirm('Save changes to ' + tab.label + '?');
+            let save = await customConfirm('Save changes to ' + tab.label + '?', 'Save', 'Don\'t Save');
             if (save) {
                 try {
                     await writeFileContent(tab.filePath, editor.getValue());
@@ -612,7 +612,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         // check dirty state for file tabs
         if (dirtyTabs.has(tabId) && tab.filePath) {
-            let save = await customConfirm('Save changes to ' + tab.label + '?');
+            let save = await customConfirm('Save changes to ' + tab.label + '?', 'Save', 'Don\'t Save');
             if (save) {
                 try {
                     await writeFileContent(tab.filePath, editor.getValue());
@@ -626,7 +626,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         // check scratch tabs with content
         if (!tab.filePath && scratchHasContent(tabId)) {
-            let save = await customConfirm('Save content of ' + tab.label + '?');
+            let save = await customConfirm('Save content of ' + tab.label + '?', 'Save', 'Don\'t Save');
             if (save) {
                 await saveActiveTab();
             }
@@ -876,7 +876,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!current || !current.filePath) return;
 
         if (dirtyTabs.has(current.id)) {
-            let save = await customConfirm('Save changes to ' + current.label + ' before refreshing?');
+            let save = await customConfirm('Save changes to ' + current.label + ' before refreshing?', 'Save', 'Don\'t Save');
             if (save) {
                 try {
                     await writeFileContent(current.filePath, editor.getValue());
