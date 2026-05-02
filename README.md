@@ -36,6 +36,8 @@ make dev
 
 The application will be available at `http://localhost:41773`.
 
+This app supports Mermaid diagrams in fenced code blocks using the `mermaid` language tag.
+
 ### Building for Production
 
 ```bash

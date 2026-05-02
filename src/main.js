@@ -5,11 +5,84 @@ import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
 import html2pdf from 'html2pdf.js';
+import mermaid from 'mermaid';
 
 // ----- config -----
 const CONFIG = {
     showExportPdf: false,
     scratchSaveDir: '~/Downloads',
+};
+
+const escapeHtml = (unsafe) => {
+    return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+
+const encodeMermaidSource = (source) => encodeURIComponent(source);
+const decodeMermaidSource = (value) => decodeURIComponent(value || '');
+
+const replaceMermaidBlocks = (markdown) => {
+    return markdown.replace(/```mermaid\s*\n([\s\S]*?)```/g, (match, code) => {
+        return `<div class="mermaid" data-mermaid="${encodeMermaidSource(code)}">${escapeHtml(code)}</div>`;
+    });
+};
+
+// Global CSS to hide Mermaid's own error overlays
+const mermaidErrorStyle = document.createElement('style');
+mermaidErrorStyle.innerHTML = `
+    .mermaid-error, 
+    #mermaid-error-container,
+    .mermaid [id^="mermaid-error"] { 
+        display: none !important; 
+    }
+`;
+document.head.appendChild(mermaidErrorStyle);
+
+const initializeMermaid = (dark) => {
+    mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: dark ? 'dark' : 'default',
+        suppressErrorOutput: true,
+        errorLabels: false
+    });
+    // Hard-suppress error banners by overriding the global parseError handler
+    mermaid.parseError = () => { };
+};
+
+const renderMermaidDiagrams = (container) => {
+    if (!container) {
+        return;
+    }
+
+    container.querySelectorAll('.mermaid').forEach(async (element) => {
+        const source = element.dataset.mermaid;
+        if (!source) {
+            return;
+        }
+
+        const code = decodeMermaidSource(source);
+        const id = `mermaid-${Math.random().toString(36).slice(2, 10)}`;
+
+        try {
+            // Validate syntax first.
+            // If it fails, it will throw and we'll fall back to the catch block.
+            await mermaid.parse(code);
+            
+            const result = await mermaid.render(id, code);
+            const svg = result?.svg ?? result;
+            element.innerHTML = svg;
+        } catch (error) {
+            // Silent failure: keep as code block
+            element.innerHTML = `<pre class="language-mermaid">${escapeHtml(code)}</pre>`;
+            // eslint-disable-next-line no-console
+            console.warn('Mermaid syntax error, falling back to code block.', error);
+        }
+    });
 };
 
 marked.use(markedHighlight({
@@ -106,6 +179,15 @@ let message = 'Hello world';
 alert(message);
 ${"`"}${"`"}${"`"}
 
+## Mermaid diagrams
+
+${"`"}${"`"}${"`"}mermaid
+graph TD
+  A[Start] --> B{Decision}
+  B -->|Yes| C[Finish]
+  B -->|No| D[Alternate]
+${"`"}${"`"}${"`"}
+
 ## Inline code
 
 This web site is using ${"`"}markedjs/marked${"`"}.
@@ -118,6 +200,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     }
 
     let setupEditor = () => {
+        initializeMermaid(false);
         let editor = monaco.editor.create(document.querySelector('#editor'), {
             fontSize: 14,
             language: 'markdown',
@@ -200,9 +283,11 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             headerIds: false,
             mangle: false
         };
-        let html = marked.parse(markdown, options);
-        let sanitized = DOMPurify.sanitize(html, { ADD_ATTR: ['class'] });
-        document.querySelector('#output').innerHTML = sanitized;
+        let html = marked.parse(replaceMermaidBlocks(markdown), options);
+        let sanitized = DOMPurify.sanitize(html, { ADD_ATTR: ['class', 'data-mermaid'] });
+        const output = document.querySelector('#output');
+        output.innerHTML = sanitized;
+        renderMermaidDiagrams(output);
     };
 
     let presetValue = (value) => {
@@ -599,6 +684,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         // set preview css to match theme
         setPreviewCss(settings);
         setHljsCss(settings);
+        initializeMermaid(settings);
 
         checkbox.addEventListener('change', (event) => {
             let checked = event.currentTarget.checked;
@@ -606,6 +692,8 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             saveThemeSettings(checked);
             setPreviewCss(checked);
             setHljsCss(checked);
+            initializeMermaid(checked);
+            renderMermaidDiagrams(document.querySelector('#output'));
             if (monaco && monaco.editor && typeof monaco.editor.setTheme === 'function') {
                 monaco.editor.setTheme(checked ? 'vs-dark' : 'vs');
             }
