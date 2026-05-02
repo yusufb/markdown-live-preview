@@ -71,3 +71,6 @@ local/
 # Vite cache
 .vite/
 
+# Build artifacts
+dist/
+
