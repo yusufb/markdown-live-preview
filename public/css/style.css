@@ -301,6 +301,15 @@ footer {
   z-index: 1;
 }
 
+.split-container.editor-collapsed #edit,
+.split-container.editor-collapsed #split-divider {
+  display: none;
+}
+
+.split-container.editor-collapsed #preview {
+  width: 100% !important;
+}
+
 .split-divider.hover {
   background: #999;
 }

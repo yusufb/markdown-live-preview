@@ -203,6 +203,7 @@ const init = () => {
     const localStorageScrollBarKey = 'scroll_bar_settings';
     const localStorageThemeKey = 'theme_settings';
     const localStorageDividerKey = 'divider_ratio';
+    const localStorageEditorCollapsedKey = 'editor_collapsed';
     const localStorageTabsKey = 'tabs';
     const localStorageActiveTabKey = 'active_tab';
 
@@ -441,6 +442,23 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         Storehouse.deleteItem(localStorageNamespace, 'tab_content_' + tabId);
     };
 
+    let loadEditorCollapsed = () => {
+        let raw = Storehouse.getItem(localStorageNamespace, localStorageEditorCollapsedKey);
+        return raw === true || raw === 'true';
+    };
+
+    let saveEditorCollapsed = (collapsed) => {
+        let expiredAt = new Date(2099, 1, 1);
+        Storehouse.setItem(localStorageNamespace, localStorageEditorCollapsedKey, collapsed, expiredAt);
+    };
+
+    let toggleEditorCollapsed = () => {
+        let container = document.querySelector('#container');
+        if (!container) return;
+        let collapsed = container.classList.toggle('editor-collapsed');
+        saveEditorCollapsed(collapsed);
+    };
+
     let renderTabs = () => {
         let tabBar = document.querySelector('#tab-bar');
         if (!tabBar) return;
@@ -467,6 +485,12 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
             el.addEventListener('click', () => {
                 if (tab.id !== activeTabId) switchToTab(tab.id);
+            });
+
+            el.addEventListener('dblclick', (e) => {
+                if (!el.classList.contains('active')) return;
+                if (e.target.classList.contains('tab-close')) return;
+                toggleEditorCollapsed();
             });
 
             tabBar.appendChild(el);
@@ -1233,6 +1257,11 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     initThemeToggle(themeSettings);
 
     setupDivider();
+
+    if (loadEditorCollapsed()) {
+        let container = document.querySelector('#container');
+        if (container) container.classList.add('editor-collapsed');
+    }
 
     window.addEventListener('beforeunload', (e) => {
         if (dirtyTabs.size > 0) {
