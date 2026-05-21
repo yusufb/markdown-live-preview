@@ -156,20 +156,6 @@ header input[type="checkbox"] {
     margin-top: 0px;
 }
 
-#github {
-    padding-right: 32px;
-}
-
-#github img {
-  display: block;
-  width: 16px;
-}
-
-#github a {
-  display: block;
-  width: 16px;
-}
-
 #tab-bar {
   display: flex;
   background-color: #555;
