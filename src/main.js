@@ -11,6 +11,7 @@ import mermaid from 'mermaid';
 const CONFIG = {
     showExportPdf: false,
     scratchSaveDir: '~/Downloads',
+    syncScroll: true,
 };
 
 const customAlert = (message) => {
@@ -196,11 +197,9 @@ marked.use(markedHighlight({
 
 const init = () => {
     let hasEdited = false;
-    let scrollBarSync = false;
 
     const localStorageNamespace = 'com.markdownlivepreview';
     const localStorageKey = 'last_state';
-    const localStorageScrollBarKey = 'scroll_bar_settings';
     const localStorageThemeKey = 'theme_settings';
     const localStorageDividerKey = 'divider_ratio';
     const localStorageEditorCollapsedKey = 'editor_collapsed';
@@ -340,7 +339,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         let scrollSource = null;
 
         editor.onDidScrollChange((e) => {
-            if (!scrollBarSync || scrollSource === 'preview') {
+            if (!CONFIG.syncScroll || scrollSource === 'preview') {
                 return;
             }
 
@@ -360,7 +359,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         let previewElement = document.querySelector('#preview');
         previewElement.addEventListener('scroll', () => {
-            if (!scrollBarSync || scrollSource === 'editor') {
+            if (!CONFIG.syncScroll || scrollSource === 'editor') {
                 return;
             }
 
@@ -748,20 +747,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         }
     };
 
-    // ----- sync scroll position -----
-
-    let initScrollBarSync = (settings) => {
-        let checkbox = document.querySelector('#sync-scroll-checkbox');
-        checkbox.checked = settings;
-        scrollBarSync = settings;
-
-        checkbox.addEventListener('change', (event) => {
-            let checked = event.currentTarget.checked;
-            scrollBarSync = checked;
-            saveScrollBarSettings(checked);
-        });
-    };
-
     // ----- preview CSS loader (switch github-markdown css) -----
     const PREVIEW_CSS_LIGHT = 'css/github-markdown-light.css?v=1.11.0';
     const PREVIEW_CSS_DARK = 'css/github-markdown-dark_dimmed.css?v=1.11.0';
@@ -837,36 +822,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                 monaco.editor.setTheme(checked ? 'vs-dark' : 'vs');
             }
         });
-    };
-
-    let enableScrollBarSync = () => {
-        scrollBarSync = true;
-    };
-
-    let disableScrollBarSync = () => {
-        scrollBarSync = false;
-    };
-
-    // ----- clipboard utils -----
-
-    let copyToClipboard = (text, successHandler, errorHandler) => {
-        navigator.clipboard.writeText(text).then(
-            () => {
-                successHandler();
-            },
-
-            () => {
-                errorHandler();
-            }
-        );
-    };
-
-    let notifyCopied = () => {
-        let labelElement = document.querySelector("#copy-button a");
-        labelElement.innerHTML = "Copied!";
-        setTimeout(() => {
-            labelElement.innerHTML = "Copy";
-        }, 1000)
     };
 
     // ----- export preview -----
@@ -1001,19 +956,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
-    let setupCopyButton = (editor) => {
-        document.querySelector("#copy-button").addEventListener('click', (event) => {
-            event.preventDefault();
-            let value = editor.getValue();
-            copyToClipboard(value, () => {
-                notifyCopied();
-            },
-                () => {
-                    // nothing to do
-                });
-        });
-    };
-
     let setupSaveButton = () => {
         document.querySelector("#save-button").addEventListener('click', (event) => {
             event.preventDefault();
@@ -1063,11 +1005,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         Storehouse.setItem(localStorageNamespace, localStorageKey, content, expiredAt);
     };
 
-    let loadScrollBarSettings = () => {
-        let lastContent = Storehouse.getItem(localStorageNamespace, localStorageScrollBarKey);
-        return lastContent;
-    };
-
     let loadThemeSettings = () => {
         let last = Storehouse.getItem(localStorageNamespace, localStorageThemeKey);
         if (last === null || last === undefined) {
@@ -1081,11 +1018,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             }
         }
         return last;
-    };
-
-    let saveScrollBarSettings = (settings) => {
-        let expiredAt = new Date(2099, 1, 1);
-        Storehouse.setItem(localStorageNamespace, localStorageScrollBarKey, settings, expiredAt);
     };
 
     let saveThemeSettings = (settings) => {
@@ -1218,7 +1150,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     presetValue(defaultInput);
 
     setupRefreshButton();
-    setupCopyButton(editor);
     setupSaveButton();
     setupExportButton();
     setupFilePathInput();
@@ -1242,9 +1173,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         saveTabList();
         renderTabs();
     }
-
-    let scrollBarSettings = loadScrollBarSettings() || false;
-    initScrollBarSync(scrollBarSettings);
 
     // initialize theme (dark/light)
     let themeSettings = loadThemeSettings();
