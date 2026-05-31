@@ -4,12 +4,10 @@ import { marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
-import html2pdf from 'html2pdf.js';
 import mermaid from 'mermaid';
 
 // ----- config -----
 const CONFIG = {
-    showExportPdf: false,
     scratchSaveDir: '~/Downloads',
     syncScroll: true,
 };
@@ -824,100 +822,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
-    // ----- export preview -----
-
-    let exportLightCssPromise = null;
-
-    let getLightMarkdownCss = () => {
-        if (exportLightCssPromise) {
-            return exportLightCssPromise;
-        }
-
-        exportLightCssPromise = fetch(PREVIEW_CSS_LIGHT)
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`Failed to load export CSS: ${response.status}`);
-                }
-                return response.text();
-            })
-            .catch((error) => {
-                // eslint-disable-next-line no-console
-                console.error('Failed to load light markdown CSS', error);
-                return '';
-            });
-
-        return exportLightCssPromise;
-    };
-
-    let exportPreviewToPdf = () => {
-        const previewElement = document.querySelector('#preview-wrapper');
-        if (!previewElement) {
-            return;
-        }
-
-        if (typeof html2pdf !== 'function') {
-            customAlert('PDF export is not available yet. Please try again in a moment.');
-            return;
-        }
-
-        getLightMarkdownCss().then((lightCss) => {
-            const options = {
-                margin: 10,
-                filename: 'markdown-preview.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: {
-                    scale: 2,
-                    useCORS: true,
-                    onclone: (clonedDoc) => {
-                        clonedDoc.documentElement.setAttribute('data-theme', 'light');
-
-                        const markdownLink = clonedDoc.getElementById('gh-markdown-link');
-                        if (markdownLink) {
-                            markdownLink.setAttribute('href', PREVIEW_CSS_LIGHT);
-                        }
-
-                        if (lightCss) {
-                            const style = clonedDoc.createElement('style');
-                            style.id = 'export-light-css';
-                            style.textContent = `${lightCss}
-#preview-wrapper, #output, body {
-  background: #fff !important;
-  color: #24292f !important;
-}`;
-                            clonedDoc.head.appendChild(style);
-                        }
-
-                        const clonedPreview = clonedDoc.getElementById('preview-wrapper');
-                        if (clonedPreview) {
-                            clonedPreview.style.background = '#fff';
-                            clonedPreview.style.color = '#24292f';
-                            clonedPreview.style.width = '190mm';
-                            clonedPreview.style.maxWidth = '190mm';
-                        }
-
-                        const clonedOutput = clonedDoc.getElementById('output');
-                        if (clonedOutput) {
-                            clonedOutput.style.background = '#fff';
-                            clonedOutput.style.color = '#24292f';
-                            clonedOutput.style.width = '190mm';
-                            clonedOutput.style.maxWidth = '190mm';
-                        }
-                    }
-                },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
-
-            html2pdf()
-                .set(options)
-                .from(previewElement)
-                .save()
-                .catch((error) => {
-                    // eslint-disable-next-line no-console
-                    console.error('Failed to export PDF', error);
-                });
-        });
-    };
-
     // ----- setup -----
 
     // Refresh file content (re-read from disk)
@@ -960,21 +864,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         document.querySelector("#save-button").addEventListener('click', (event) => {
             event.preventDefault();
             if (activeTabId) saveTab(activeTabId);
-        });
-    };
-
-    let setupExportButton = () => {
-        const exportButton = document.querySelector('#export-button');
-        if (!exportButton) {
-            return;
-        }
-        if (!CONFIG.showExportPdf) {
-            exportButton.style.display = 'none';
-            return;
-        }
-        exportButton.addEventListener('click', (event) => {
-            event.preventDefault();
-            exportPreviewToPdf();
         });
     };
 
@@ -1151,7 +1040,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     setupRefreshButton();
     setupSaveButton();
-    setupExportButton();
     setupFilePathInput();
 
     // initialise tabs
