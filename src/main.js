@@ -1,4 +1,3 @@
-import Storehouse from 'storehouse-js';
 import * as monaco from 'monaco-editor';
 import { marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
@@ -196,13 +195,29 @@ marked.use(markedHighlight({
 const init = () => {
     let hasEdited = false;
 
-    const localStorageNamespace = 'com.markdownlivepreview';
-    const localStorageKey = 'last_state';
-    const localStorageThemeKey = 'theme_settings';
-    const localStorageDividerKey = 'divider_ratio';
-    const localStorageEditorCollapsedKey = 'editor_collapsed';
-    const localStorageTabsKey = 'tabs';
-    const localStorageActiveTabKey = 'active_tab';
+    const STORAGE = {
+        tabs: 'mlp.tabs',
+        theme: 'mlp.theme',
+        dividerRatio: 'mlp.dividerRatio',
+        editorCollapsed: 'mlp.editorCollapsed',
+        tabContent: (id) => 'mlp.tab.' + id,
+        tabContentPrefix: 'mlp.tab.',
+        tabScroll: (id) => 'mlp.tabScroll.' + id,
+        tabScrollPrefix: 'mlp.tabScroll.',
+    };
+
+    const readJSON = (key) => {
+        try {
+            const raw = localStorage.getItem(key);
+            return raw == null ? null : JSON.parse(raw);
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const writeJSON = (key, value) => {
+        localStorage.setItem(key, JSON.stringify(value));
+    };
 
     // ----- tab state -----
     let tabs = [];
@@ -357,6 +372,10 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         let previewElement = document.querySelector('#preview');
         previewElement.addEventListener('scroll', () => {
+            if (activeTabId) {
+                saveTabScroll(activeTabId, previewElement.scrollTop);
+            }
+
             if (!CONFIG.syncScroll || scrollSource === 'editor') {
                 return;
             }
@@ -410,43 +429,68 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     };
 
     let saveTabList = () => {
-        let expiredAt = new Date(2099, 1, 1);
         let persisted = tabs.map((t) => ({ id: t.id, filePath: t.filePath, label: t.label }));
-        Storehouse.setItem(localStorageNamespace, localStorageTabsKey, JSON.stringify(persisted), expiredAt);
-        Storehouse.setItem(localStorageNamespace, localStorageActiveTabKey, activeTabId, expiredAt);
+        writeJSON(STORAGE.tabs, { tabs: persisted, activeId: activeTabId });
     };
 
     let loadTabList = () => {
-        let raw = Storehouse.getItem(localStorageNamespace, localStorageTabsKey);
-        if (!raw) return [];
-        try {
-            return JSON.parse(raw);
-        } catch (e) {
-            return [];
-        }
+        let data = readJSON(STORAGE.tabs);
+        if (!data || !Array.isArray(data.tabs)) return { tabs: [], activeId: null };
+        return { tabs: data.tabs, activeId: data.activeId || null };
     };
 
     let loadScratchContent = (tabId) => {
-        return Storehouse.getItem(localStorageNamespace, 'tab_content_' + tabId);
+        return localStorage.getItem(STORAGE.tabContent(tabId));
     };
 
     let saveScratchContent = (tabId, content) => {
-        let expiredAt = new Date(2099, 1, 1);
-        Storehouse.setItem(localStorageNamespace, 'tab_content_' + tabId, content, expiredAt);
+        localStorage.setItem(STORAGE.tabContent(tabId), content);
     };
 
     let removeScratchContent = (tabId) => {
-        Storehouse.deleteItem(localStorageNamespace, 'tab_content_' + tabId);
+        localStorage.removeItem(STORAGE.tabContent(tabId));
+    };
+
+    let loadTabScroll = (tabId) => {
+        let raw = localStorage.getItem(STORAGE.tabScroll(tabId));
+        if (raw == null) return null;
+        let n = parseInt(raw, 10);
+        return Number.isFinite(n) ? n : null;
+    };
+
+    let saveTabScroll = (tabId, scrollTop) => {
+        localStorage.setItem(STORAGE.tabScroll(tabId), String(Math.round(scrollTop)));
+    };
+
+    let removeTabScroll = (tabId) => {
+        localStorage.removeItem(STORAGE.tabScroll(tabId));
+    };
+
+    // Delete any mlp.tab.<id> or mlp.tabScroll.<id> entries whose id is not in the live tabs list.
+    // Runs once at startup as a safe sweep for orphans left by crashes or aborted closes.
+    let cleanupOrphanScratchContent = () => {
+        const liveIds = new Set(tabs.map((t) => t.id));
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key) continue;
+            if (key.startsWith(STORAGE.tabContentPrefix)) {
+                const id = key.slice(STORAGE.tabContentPrefix.length);
+                if (!liveIds.has(id)) toRemove.push(key);
+            } else if (key.startsWith(STORAGE.tabScrollPrefix)) {
+                const id = key.slice(STORAGE.tabScrollPrefix.length);
+                if (!liveIds.has(id)) toRemove.push(key);
+            }
+        }
+        toRemove.forEach((k) => localStorage.removeItem(k));
     };
 
     let loadEditorCollapsed = () => {
-        let raw = Storehouse.getItem(localStorageNamespace, localStorageEditorCollapsedKey);
-        return raw === true || raw === 'true';
+        return localStorage.getItem(STORAGE.editorCollapsed) === 'true';
     };
 
     let saveEditorCollapsed = (collapsed) => {
-        let expiredAt = new Date(2099, 1, 1);
-        Storehouse.setItem(localStorageNamespace, localStorageEditorCollapsedKey, collapsed, expiredAt);
+        localStorage.setItem(STORAGE.editorCollapsed, String(collapsed));
     };
 
     let toggleEditorCollapsed = () => {
@@ -636,6 +680,10 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             if (!ok) return;
         }
         saveCurrentTabContent();
+        if (activeTabId) {
+            let previewElement = document.querySelector('#preview');
+            if (previewElement) saveTabScroll(activeTabId, previewElement.scrollTop);
+        }
         activeTabId = tabId;
         let tab = getActiveTab();
         if (!tab) return;
@@ -669,6 +717,14 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         document.title = tab.label + ' - Markdown Live Preview';
         saveTabList();
         renderTabs();
+
+        let savedScroll = loadTabScroll(activeTabId);
+        if (savedScroll != null) {
+            requestAnimationFrame(() => {
+                let previewEl = document.querySelector('#preview');
+                if (previewEl) previewEl.scrollTop = savedScroll;
+            });
+        }
     };
 
     let openFileTab = async (filePath) => {
@@ -728,6 +784,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!tab.filePath) {
             removeScratchContent(tab.id);
         }
+        removeTabScroll(tab.id);
 
         tabs.splice(idx, 1);
 
@@ -842,11 +899,21 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             dirtyTabs.delete(current.id);
         }
 
+        let previewEl = document.querySelector('#preview');
+        let savedScroll = previewEl ? previewEl.scrollTop : null;
+        if (savedScroll != null) saveTabScroll(current.id, savedScroll);
+
         presetValue('');
         await new Promise((resolve) => setTimeout(resolve, 100));
         try {
             let result = await fetchFileContent(current.filePath);
             presetValue(result.content);
+            if (savedScroll != null) {
+                requestAnimationFrame(() => {
+                    let el = document.querySelector('#preview');
+                    if (el) el.scrollTop = savedScroll;
+                });
+            }
         } catch (err) {
             await customAlert('Failed to refresh file: ' + err.message);
         }
@@ -884,48 +951,20 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     // ----- local state -----
 
-    let loadLastContent = () => {
-        let lastContent = Storehouse.getItem(localStorageNamespace, localStorageKey);
-        return lastContent;
-    };
-
-    let saveLastContent = (content) => {
-        let expiredAt = new Date(2099, 1, 1);
-        Storehouse.setItem(localStorageNamespace, localStorageKey, content, expiredAt);
-    };
-
     let loadThemeSettings = () => {
-        let last = Storehouse.getItem(localStorageNamespace, localStorageThemeKey);
-        if (last === null || last === undefined) {
-            try {
-                // fallback to raw localStorage boot key used by inline script
-                const raw = localStorage.getItem('com.markdownlivepreview_theme');
-                if (raw === 'dark') return true;
-                if (raw === 'light') return false;
-            } catch (e) {
-                // ignore
-            }
-        }
-        return last;
+        return localStorage.getItem(STORAGE.theme) === 'dark';
     };
 
-    let saveThemeSettings = (settings) => {
-        let expiredAt = new Date(2099, 1, 1);
-        Storehouse.setItem(localStorageNamespace, localStorageThemeKey, settings, expiredAt);
-        try {
-            localStorage.setItem('com.markdownlivepreview_theme', settings ? 'dark' : 'light');
-        } catch (e) {
-            // ignore storage errors
-        }
+    let saveThemeSettings = (enabled) => {
+        localStorage.setItem(STORAGE.theme, enabled ? 'dark' : 'light');
     };
 
     let loadDividerRatio = () => {
-        return Storehouse.getItem(localStorageNamespace, localStorageDividerKey);
+        return localStorage.getItem(STORAGE.dividerRatio);
     };
 
     let saveDividerRatio = (ratio) => {
-        let expiredAt = new Date(2099, 1, 1);
-        Storehouse.setItem(localStorageNamespace, localStorageDividerKey, ratio, expiredAt);
+        localStorage.setItem(STORAGE.dividerRatio, String(ratio));
     };
 
     let setupDivider = () => {
@@ -1022,12 +1061,13 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     let editor = setupEditor();
 
     // restore tabs from localStorage
-    let persistedTabs = loadTabList();
-    let persistedActiveId = Storehouse.getItem(localStorageNamespace, localStorageActiveTabKey);
+    let { tabs: persistedTabs, activeId: persistedActiveId } = loadTabList();
 
     if (persistedTabs.length > 0) {
         tabs = persistedTabs.map((t) => ({ id: t.id, filePath: t.filePath, label: t.label }));
     }
+
+    cleanupOrphanScratchContent();
 
     let rawHash = window.location.hash.slice(1);
     let hashPath = '';
@@ -1051,26 +1091,16 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             : tabs[0].id;
         switchToTab(startId);
     } else {
-        // fresh start - migrate old last_state if present
-        let lastContent = loadLastContent();
         let tab = { id: crypto.randomUUID(), filePath: null, label: nextScratchLabel() };
         tabs.push(tab);
-        saveScratchContent(tab.id, lastContent || defaultInput);
+        saveScratchContent(tab.id, defaultInput);
         activeTabId = tab.id;
-        presetValue(lastContent || defaultInput);
+        presetValue(defaultInput);
         saveTabList();
         renderTabs();
     }
 
-    // initialize theme (dark/light)
-    let themeSettings = loadThemeSettings();
-    // normalize to boolean (Storehouse may return string or boolean)
-    if (themeSettings === 'true' || themeSettings === true) {
-        themeSettings = true;
-    } else {
-        themeSettings = false;
-    }
-    initThemeToggle(themeSettings);
+    initThemeToggle(loadThemeSettings());
 
     setupDivider();
 

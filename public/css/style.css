@@ -292,6 +292,7 @@ footer {
 #preview.column {
   overflow-y: scroll;
   white-space: normal;
+  overflow-anchor: none;
 }
 
 .split-container {

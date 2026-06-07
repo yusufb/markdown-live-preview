@@ -10,7 +10,7 @@
     <script>
       (function(){
         try {
-          var BOOT_THEME_KEY = 'com.markdownlivepreview_theme';
+          var BOOT_THEME_KEY = 'mlp.theme';
           var raw = localStorage.getItem(BOOT_THEME_KEY);
           var useDark = raw === 'dark';
           document.documentElement.setAttribute('data-theme', useDark ? 'dark' : 'light');
