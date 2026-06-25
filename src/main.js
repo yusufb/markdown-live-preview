@@ -9,6 +9,7 @@ import mermaid from 'mermaid';
 const CONFIG = {
     scratchSaveDir: '~/Downloads',
     syncScroll: true,
+    fullscreenPreviewMaxWidth: '1024px',   // max width of preview content in full-screen
 };
 
 const customAlert = (message) => {
@@ -1099,6 +1100,8 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         saveTabList();
         renderTabs();
     }
+
+    document.documentElement.style.setProperty('--fullscreen-preview-max-width', CONFIG.fullscreenPreviewMaxWidth);
 
     initThemeToggle(loadThemeSettings());
 
