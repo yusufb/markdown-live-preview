@@ -9,7 +9,7 @@ import mermaid from 'mermaid';
 const CONFIG = {
     scratchSaveDir: '~/Downloads',
     syncScroll: true,
-    fullscreenPreviewMaxWidth: '1024px',   // max width of preview content in full-screen
+    fullscreenPreviewMaxWidth: '85ch',   // max width of preview content in full-screen
 };
 
 const customAlert = (message) => {
