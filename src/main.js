@@ -741,14 +741,14 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         await switchToTab(tab.id);
     };
 
-    let openScratchTab = () => {
+    let openScratchTab = (initialContent = '') => {
         let tab = {
             id: crypto.randomUUID(),
             filePath: null,
             label: nextScratchLabel()
         };
         tabs.push(tab);
-        saveScratchContent(tab.id, '');
+        saveScratchContent(tab.id, initialContent);
         saveTabList();
         switchToTab(tab.id);
     };
@@ -935,6 +935,28 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
+    let openTabFromClipboard = async () => {
+        let text;
+        try {
+            text = await navigator.clipboard.readText();
+        } catch (err) {
+            await customAlert('Could not read clipboard: ' + err.message);
+            return;
+        }
+        if (!text) {
+            await customAlert('Clipboard is empty.');
+            return;
+        }
+        openScratchTab(text);
+    };
+
+    let setupClipboardButton = () => {
+        document.querySelector("#clipboard-button").addEventListener('click', (event) => {
+            event.preventDefault();
+            openTabFromClipboard();
+        });
+    };
+
     let loadFileFromPath = async (filePath) => {
         await openFileTab(filePath);
     };
@@ -1081,6 +1103,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     setupRefreshButton();
     setupSaveButton();
+    setupClipboardButton();
     setupFilePathInput();
 
     // initialise tabs

@@ -104,15 +104,21 @@ header a:hover {
     margin-left: 16px;
 }
 
+#clipboard-button {
+    margin-left: 16px;
+}
+
 #refresh-button a,
-#save-button a {
+#save-button a,
+#clipboard-button a {
     display: inline-flex;
     align-items: center;
     gap: 4px;
 }
 
 #refresh-button svg,
-#save-button svg {
+#save-button svg,
+#clipboard-button svg {
     width: 12px;
     height: 12px;
 }
