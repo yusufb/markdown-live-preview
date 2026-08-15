@@ -8,6 +8,7 @@ A local-first fork of [tanabe/markdown-live-preview](https://github.com/tanabe/m
 - **Multi-Tab Editor**: Open multiple files or scratchpads simultaneously in a tabbed interface.
 - **Focus Mode**: Double-click an active tab to hide the editor and expand the preview to 100% width.
 - **Mermaid Diagrams**: Native support for flowcharts, sequence diagrams, and more using Mermaid.js syntax.
+- **LaTeX Math Formulas**: Fast rendering for inline (`$...$`) and block (`$$...$$`) mathematical equations powered by KaTeX.
 - **Syntax Highlighting**: Beautiful code blocks with `highlight.js`, automatically switching between light and dark themes.
 - **Themed Dialogs**: Custom alert, confirm, and prompt dialogs
 - **Persistent Workspace**: Your open tabs, active file, and even the editor/preview split ratio are saved between sessions.

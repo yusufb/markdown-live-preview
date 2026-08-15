@@ -4,6 +4,8 @@ import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
 import mermaid from 'mermaid';
+import markedKatex from 'marked-katex-extension';
+import 'katex/dist/katex.min.css';
 
 // ----- config -----
 const CONFIG = {
@@ -193,6 +195,11 @@ marked.use(markedHighlight({
     }
 }));
 
+marked.use(markedKatex({
+    throwOnError: false,
+    nonStandard: true
+}));
+
 const init = () => {
     let hasEdited = false;
 
@@ -301,6 +308,16 @@ graph TD
   B -->|No| D[Alternate]
 ${"`"}${"`"}${"`"}
 
+## Math formulas
+
+Inline: $\alpha \approx 1/137$
+
+Block:
+
+$$
+\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+$$
+
 ## Inline code
 
 This web site is using ${"`"}markedjs/marked${"`"}.
@@ -401,7 +418,11 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             mangle: false
         };
         let html = marked.parse(replaceMermaidBlocks(markdown), options);
-        let sanitized = DOMPurify.sanitize(html, { ADD_ATTR: ['class', 'data-mermaid'] });
+        let sanitized = DOMPurify.sanitize(html, {
+            USE_PROFILES: { mathMl: true, html: true, svg: true },
+            ADD_TAGS: ['semantics', 'annotation'],
+            ADD_ATTR: ['class', 'data-mermaid', 'aria-hidden', 'encoding']
+        });
         const output = document.querySelector('#output');
         output.innerHTML = sanitized;
         renderMermaidDiagrams(output);
