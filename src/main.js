@@ -668,11 +668,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         return content !== null && content !== undefined && content.trim() !== '';
     };
 
-    let hasUnsavedChanges = (tabId) => {
-        if (dirtyTabs.has(tabId)) return true;
-        return scratchHasContent(tabId);
-    };
-
     // Returns true if it's ok to proceed, false if cancelled
     let confirmDirtyTab = async (tabId) => {
         let tab = tabs.find((t) => t.id === tabId);
@@ -1158,11 +1153,6 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     window.addEventListener('beforeunload', (e) => {
         if (dirtyTabs.size > 0) {
-            e.preventDefault();
-            return;
-        }
-        let hasScratchContent = tabs.some((t) => !t.filePath && scratchHasContent(t.id));
-        if (hasScratchContent) {
             e.preventDefault();
         }
     });
