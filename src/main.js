@@ -326,12 +326,12 @@ ${"`"}${"`"}${"`"}
 
 ## Math formulas
 
-Inline: $\alpha \approx 1/137$
+Inline: $\\alpha \\approx 1/137$
 
 Block:
 
 $$
-\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}
 $$
 
 ## Inline code
