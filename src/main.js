@@ -113,6 +113,21 @@ const customPrompt = (message, defaultValue = '') => {
 };
 
 
+// hash value that opens a new tab with the clipboard content instead of a file
+const CLIPBOARD_HASH = '[clipboard]';
+
+const decodeHash = (hash) => {
+    const raw = hash.startsWith('#') ? hash.slice(1) : hash;
+    try {
+        return decodeURIComponent(raw);
+    } catch (e) {
+        return raw;
+    }
+};
+
+// matches #[clipboard] and its encoded form #%5Bclipboard%5D
+const isClipboardHash = (hash) => decodeHash(hash).trim().toLowerCase() === CLIPBOARD_HASH;
+
 const escapeHtml = (unsafe) => {
     return unsafe
         .replace(/&/g, '&amp;')
@@ -973,14 +988,29 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
-    let openTabFromClipboard = async () => {
-        let text;
+    // returns null when the read failed or was cancelled, '' for an empty clipboard
+    let readClipboardText = async ({ offerRetry }) => {
         try {
-            text = await navigator.clipboard.readText();
+            return await navigator.clipboard.readText();
         } catch (err) {
+            // a read with no user gesture behind it (the #[clipboard] hash) can be
+            // rejected; a click on the dialog supplies the missing activation
+            if (offerRetry) {
+                let retry = await customConfirm(
+                    'Could not read clipboard automatically. Click Paste to try again.',
+                    'Paste'
+                );
+                if (!retry) return null;
+                return await readClipboardText({ offerRetry: false });
+            }
             await customAlert('Could not read clipboard: ' + err.message);
-            return;
+            return null;
         }
+    };
+
+    let openTabFromClipboard = async ({ offerRetry = false } = {}) => {
+        let text = await readClipboardText({ offerRetry });
+        if (text === null) return;
         if (!text) {
             await customAlert('Clipboard is empty.');
             return;
@@ -995,6 +1025,15 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
+    // navigating an already-open tab to #[clipboard] only changes the fragment,
+    // so the load-time check alone would not fire
+    let setupClipboardHashTrigger = () => {
+        window.addEventListener('hashchange', () => {
+            if (!isClipboardHash(window.location.hash)) return;
+            openTabFromClipboard({ offerRetry: true });
+        });
+    };
+
     let loadFileFromPath = async (filePath) => {
         await openFileTab(filePath);
     };
@@ -1002,6 +1041,14 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     let setupFilePathInput = () => {
         const input = document.querySelector('#file-path-input');
         if (!input) return;
+        // clicking the unfocused input selects the whole path; once focused, clicks
+        // place the cursor as usual so part of the path can still be edited
+        input.addEventListener('mousedown', (event) => {
+            if (document.activeElement === input) return;
+            event.preventDefault();
+            input.focus();
+            input.select();
+        });
         input.addEventListener('keydown', async (event) => {
             if (event.key !== 'Enter') return;
             const filePath = input.value.trim();
@@ -1138,11 +1185,8 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     cleanupOrphanScratchContent();
 
-    let rawHash = window.location.hash.slice(1);
-    let hashPath = '';
-    if (rawHash) {
-        try { hashPath = decodeURIComponent(rawHash); } catch (e) { hashPath = rawHash; }
-    }
+    let clipboardRequested = isClipboardHash(window.location.hash);
+    let hashPath = clipboardRequested ? '' : decodeHash(window.location.hash);
 
     // set initial content before async tab switching
     presetValue(defaultInput);
@@ -1150,16 +1194,18 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     setupRefreshButton();
     setupSaveButton();
     setupClipboardButton();
+    setupClipboardHashTrigger();
     setupFilePathInput();
 
     // initialise tabs
+    let initialTabReady;
     if (hashPath) {
-        openFileTab(hashPath);
+        initialTabReady = openFileTab(hashPath);
     } else if (tabs.length > 0) {
         let startId = (persistedActiveId && tabs.find((t) => t.id === persistedActiveId))
             ? persistedActiveId
             : tabs[0].id;
-        switchToTab(startId);
+        initialTabReady = switchToTab(startId);
     } else {
         let tab = { id: crypto.randomUUID(), filePath: null, label: nextScratchLabel() };
         tabs.push(tab);
@@ -1168,6 +1214,13 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         presetValue(defaultInput);
         saveTabList();
         renderTabs();
+        initialTabReady = Promise.resolve();
+    }
+
+    // the clipboard tab is opened on top of the restored tabs, so it has to wait for
+    // the initial tab switch to finish before it takes over the active tab and content
+    if (clipboardRequested) {
+        initialTabReady.then(() => openTabFromClipboard({ offerRetry: true }));
     }
 
     document.documentElement.style.setProperty('--fullscreen-preview-max-width', CONFIG.fullscreenPreviewMaxWidth);
