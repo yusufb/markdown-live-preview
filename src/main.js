@@ -206,6 +206,7 @@ const init = () => {
     const STORAGE = {
         tabs: 'mlp.tabs',
         theme: 'mlp.theme',
+        fullWidth: 'mlp.fullWidth',
         dividerRatio: 'mlp.dividerRatio',
         editorCollapsed: 'mlp.editorCollapsed',
         tabContent: (id) => 'mlp.tab.' + id,
@@ -862,6 +863,27 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         }
     };
 
+    // ----- full width toggle -----
+    let setFullWidth = (enabled) => {
+        let container = document.querySelector('#container');
+        if (container) {
+            container.classList.toggle('full-width', enabled);
+        }
+    };
+
+    let initFullWidthToggle = (settings) => {
+        let checkbox = document.querySelector('#full-width-checkbox');
+        if (!checkbox) return;
+        checkbox.checked = settings;
+        setFullWidth(settings);
+
+        checkbox.addEventListener('change', (event) => {
+            let checked = event.currentTarget.checked;
+            setFullWidth(checked);
+            saveFullWidthSettings(checked);
+        });
+    };
+
     // ----- theme toggle (dark/light) -----
     let setTheme = (enabled) => {
         document.documentElement.setAttribute('data-theme', enabled ? 'dark' : 'light');
@@ -989,6 +1011,14 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     };
 
     // ----- local state -----
+
+    let loadFullWidthSettings = () => {
+        return localStorage.getItem(STORAGE.fullWidth) === 'true';
+    };
+
+    let saveFullWidthSettings = (enabled) => {
+        localStorage.setItem(STORAGE.fullWidth, String(enabled));
+    };
 
     let loadThemeSettings = () => {
         return localStorage.getItem(STORAGE.theme) === 'dark';
@@ -1142,6 +1172,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     document.documentElement.style.setProperty('--fullscreen-preview-max-width', CONFIG.fullscreenPreviewMaxWidth);
 
+    initFullWidthToggle(loadFullWidthSettings());
     initThemeToggle(loadThemeSettings());
 
     setupDivider();

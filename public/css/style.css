@@ -127,6 +127,7 @@ header a:hover {
     margin-left: 16px;
 }
 
+#full-width-button,
 #theme-button {
     margin-left: 16px;
     -webkit-user-select: none;
@@ -339,6 +340,11 @@ footer {
   background-color: var(--color-canvas-default);
   border: 1px solid var(--color-border-default);
   border-radius: 6px;
+}
+
+.split-container.full-width.editor-collapsed #output,
+.split-container.editor-collapsed.full-width #output {
+  max-width: none;
 }
 
 .split-divider.hover {
