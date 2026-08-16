@@ -54,14 +54,9 @@
             <div id="clipboard-button" title="Open clipboard text in a new tab"><a href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>Clipboard</a></div>
             <div id="file-path-input-wrapper">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
-                <input type="text" id="file-path-input" placeholder="File path" title="Type a file path and press Enter to open it" />
+                <input type="text" id="file-path-input" placeholder="File path" title="Type a file path and press Enter to open it" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
             </div>
-            <div id="full-width-button" title="Toggle full width preview in collapsed mode">
-              <input type="checkbox" id="full-width-checkbox"><label for="full-width-checkbox">Full width</label>
-            </div>
-            <div id="theme-button" title="Toggle light/dark theme">
-              <input type="checkbox" id="theme-checkbox"><label for="theme-checkbox">Dark mode</label>
-            </div>
+            <div id="settings-button" title="Settings"><a href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Settings</a></div>
         </div>
     </header>
 
@@ -85,5 +80,39 @@
     </div>
 
     <footer></footer>
+
+    <dialog id="settings-dialog" class="custom-dialog settings-dialog">
+        <div class="dialog-container settings-dialog-container">
+            <div class="settings-dialog-header">
+                <h3 class="settings-dialog-title">Settings</h3>
+            </div>
+            <div class="settings-dialog-body">
+                <div class="settings-option">
+                    <label class="settings-option-label" for="theme-checkbox">
+                        <input type="checkbox" id="theme-checkbox">
+                        <span class="settings-option-title">Dark mode</span>
+                    </label>
+                    <span class="settings-option-desc">Use dark colour scheme</span>
+                </div>
+                <div class="settings-option">
+                    <label class="settings-option-label" for="full-width-checkbox">
+                        <input type="checkbox" id="full-width-checkbox">
+                        <span class="settings-option-title">Full width</span>
+                    </label>
+                    <span class="settings-option-desc">Expand preview to full width in collapsed mode</span>
+                </div>
+                <div class="settings-option">
+                    <label class="settings-option-label" for="preview-max-width-input">
+                        <span class="settings-option-title">Preview max width</span>
+                    </label>
+                    <div class="settings-input-row">
+                        <input type="number" id="preview-max-width-input" class="dialog-input settings-number-input" min="40" max="250" step="1" value="85" autocomplete="off">
+                        <span class="settings-unit">ch</span>
+                    </div>
+                    <span class="settings-option-desc">Maximum width of preview content in collapsed mode</span>
+                </div>
+            </div>
+        </div>
+    </dialog>
   </body>
 </html>

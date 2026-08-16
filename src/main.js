@@ -11,7 +11,9 @@ import 'katex/dist/katex.min.css';
 const CONFIG = {
     scratchSaveDir: '~/Downloads',
     syncScroll: true,
-    fullscreenPreviewMaxWidth: '85ch',   // max width of preview content in full-screen
+    fullscreenPreviewMaxWidth: 85,   // max width of preview content in full-screen (in ch)
+    fullscreenPreviewMaxWidthMin: 40,
+    fullscreenPreviewMaxWidthMax: 250,
 };
 
 const customAlert = (message) => {
@@ -222,6 +224,7 @@ const init = () => {
         tabs: 'mlp.tabs',
         theme: 'mlp.theme',
         fullWidth: 'mlp.fullWidth',
+        fullscreenPreviewMaxWidth: 'mlp.fullscreenPreviewMaxWidth',
         dividerRatio: 'mlp.dividerRatio',
         editorCollapsed: 'mlp.editorCollapsed',
         tabContent: (id) => 'mlp.tab.' + id,
@@ -899,6 +902,45 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
+    // ----- preview max width setting -----
+    let setPreviewMaxWidth = (ch) => {
+        document.documentElement.style.setProperty('--fullscreen-preview-max-width', ch + 'ch');
+    };
+
+    let initFullscreenMaxWidthSetting = (savedValue) => {
+        let input = document.querySelector('#preview-max-width-input');
+        if (!input) return;
+        let val = parseInt(savedValue, 10);
+        if (isNaN(val) || val < CONFIG.fullscreenPreviewMaxWidthMin || val > CONFIG.fullscreenPreviewMaxWidthMax) {
+            val = CONFIG.fullscreenPreviewMaxWidth;
+        }
+        input.value = val;
+        setPreviewMaxWidth(val);
+
+        let updateVal = () => {
+            let current = parseInt(input.value, 10);
+            if (isNaN(current)) {
+                current = CONFIG.fullscreenPreviewMaxWidth;
+            } else {
+                if (current < CONFIG.fullscreenPreviewMaxWidthMin) current = CONFIG.fullscreenPreviewMaxWidthMin;
+                if (current > CONFIG.fullscreenPreviewMaxWidthMax) current = CONFIG.fullscreenPreviewMaxWidthMax;
+            }
+            input.value = current;
+            setPreviewMaxWidth(current);
+            saveFullscreenMaxWidthSettings(current);
+        };
+
+        input.addEventListener('input', () => {
+            let current = parseInt(input.value, 10);
+            if (!isNaN(current) && current >= CONFIG.fullscreenPreviewMaxWidthMin && current <= CONFIG.fullscreenPreviewMaxWidthMax) {
+                setPreviewMaxWidth(current);
+                saveFullscreenMaxWidthSettings(current);
+            }
+        });
+
+        input.addEventListener('change', updateVal);
+    };
+
     // ----- theme toggle (dark/light) -----
     let setTheme = (enabled) => {
         document.documentElement.setAttribute('data-theme', enabled ? 'dark' : 'light');
@@ -1034,6 +1076,29 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         });
     };
 
+    let setupSettingsButton = () => {
+        const button = document.querySelector('#settings-button');
+        const dialog = document.querySelector('#settings-dialog');
+        if (!button || !dialog) return;
+
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            dialog.showModal();
+        });
+
+        // Close on clicking outside dialog content (the backdrop)
+        dialog.addEventListener('click', (event) => {
+            const rect = dialog.getBoundingClientRect();
+            const isInDialog = (
+                rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+                rect.left <= event.clientX && event.clientX <= rect.left + rect.width
+            );
+            if (!isInDialog) {
+                dialog.close();
+            }
+        });
+    };
+
     let loadFileFromPath = async (filePath) => {
         await openFileTab(filePath);
     };
@@ -1065,6 +1130,17 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
     let saveFullWidthSettings = (enabled) => {
         localStorage.setItem(STORAGE.fullWidth, String(enabled));
+    };
+
+    let loadFullscreenMaxWidthSettings = () => {
+        let saved = localStorage.getItem(STORAGE.fullscreenPreviewMaxWidth);
+        if (!saved) return CONFIG.fullscreenPreviewMaxWidth;
+        let parsed = parseInt(saved, 10);
+        return isNaN(parsed) ? CONFIG.fullscreenPreviewMaxWidth : parsed;
+    };
+
+    let saveFullscreenMaxWidthSettings = (value) => {
+        localStorage.setItem(STORAGE.fullscreenPreviewMaxWidth, String(value));
     };
 
     let loadThemeSettings = () => {
@@ -1195,6 +1271,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     setupSaveButton();
     setupClipboardButton();
     setupClipboardHashTrigger();
+    setupSettingsButton();
     setupFilePathInput();
 
     // initialise tabs
@@ -1223,8 +1300,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         initialTabReady.then(() => openTabFromClipboard({ offerRetry: true }));
     }
 
-    document.documentElement.style.setProperty('--fullscreen-preview-max-width', CONFIG.fullscreenPreviewMaxWidth);
-
+    initFullscreenMaxWidthSetting(loadFullscreenMaxWidthSettings());
     initFullWidthToggle(loadFullWidthSettings());
     initThemeToggle(loadThemeSettings());
 
