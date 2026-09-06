@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --color-canvas-default: #ffffff;
   --color-fg-default: #333333;
   --color-border-default: #d0d7de;
@@ -20,6 +21,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --color-canvas-default: #212830;
   --color-fg-default: #e6edf3;
   --color-border-default: #30363d;
@@ -35,6 +37,8 @@
   --quote-muted-fg: #8b949e;
   --quote-fab-bg: #2d333b;
   --quote-fab-hover-bg: #373e47;
+  --selection-bg: #264f78;
+  --selection-text: #ffffff;
 }
 
 html, body {
@@ -369,9 +373,15 @@ footer {
 }
 
 /* Dark theme overrides */
-[data-theme="dark"] html, [data-theme="dark"] body {
+html[data-theme="dark"], [data-theme="dark"] body {
   background-color: #212830;
   color: #e6edf3;
+}
+
+[data-theme="dark"]::selection,
+[data-theme="dark"] *::selection {
+  background-color: var(--selection-bg, #264f78);
+  color: var(--selection-text, #ffffff);
 }
 
 [data-theme="dark"] header {
