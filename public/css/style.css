@@ -10,6 +10,13 @@
   --color-btn-primary-text: #ffffff;
   --color-btn-primary-hover-bg: #2c974b;
   --dialog-backdrop: rgba(0, 0, 0, 0.5);
+  --quote-rule: #8c959f;
+  /* deliberately the same in both themes, so it is set here only */
+  --quote-mark-bg: rgb(188 204 48 / 25%);
+  --quote-muted-fg: #57606a;
+  /* the floating buttons need to lift off the preview canvas, which uses the button background */
+  --quote-fab-bg: #ffffff;
+  --quote-fab-hover-bg: #f3f4f6;
 }
 
 [data-theme="dark"] {
@@ -24,6 +31,10 @@
   --color-btn-primary-text: #ffffff;
   --color-btn-primary-hover-bg: #2ea043;
   --dialog-backdrop: rgba(0, 0, 0, 0.7);
+  --quote-rule: #6e7681;
+  --quote-muted-fg: #8b949e;
+  --quote-fab-bg: #2d333b;
+  --quote-fab-hover-bg: #373e47;
 }
 
 html, body {
@@ -598,5 +609,205 @@ dialog.settings-dialog {
   font-size: 13px;
   font-weight: 500;
   color: var(--color-fg-default);
+}
+
+/* Quotation Mode Styles */
+
+/* mark's UA style is a yellow block, so the background has to be reset explicitly */
+mark.mlp-quote {
+  background-color: var(--quote-mark-bg);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.quote-fab {
+  position: fixed;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  line-height: 0;
+  cursor: pointer;
+  color: var(--color-btn-text);
+  background-color: var(--quote-fab-bg);
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.quote-fab:hover {
+  background-color: var(--quote-fab-hover-bg);
+}
+
+/* the inline-flex above would otherwise beat the UA rule for the hidden attribute */
+.quote-fab[hidden] {
+  display: none;
+}
+
+.quote-fab .quote-icon {
+  width: 17px;
+  height: 13px;
+}
+
+#quotes-open-button {
+  right: 24px;
+  bottom: 24px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 20px;
+}
+
+.quotes-badge {
+  font-family: Helvetica, arial, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 9px;
+  color: var(--color-btn-text);
+  background-color: var(--color-btn-hover-bg);
+}
+
+.quote-dialog-title,
+.quotes-dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-fg-default);
+}
+
+.quote-dialog-title {
+  margin-bottom: 12px;
+}
+
+.quote-dialog-selection {
+  margin: 0 0 16px 0;
+  padding: 8px 12px;
+  max-height: 30vh;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  border-left: 3px solid var(--quote-rule);
+  background-color: var(--fullscreen-canvas-bg);
+}
+
+.quote-note-input {
+  font-family: inherit;
+  min-height: 84px;
+  resize: vertical;
+}
+
+dialog.quotes-dialog {
+  max-width: 560px;
+  width: 90%;
+  max-height: 88vh;
+  box-sizing: border-box;
+}
+
+.quotes-dialog-container {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.quotes-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.quotes-dialog-count {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 9px;
+  color: var(--color-btn-text);
+  background-color: var(--color-btn-hover-bg);
+}
+
+/* fixed height with a scrolling list, so the footer button always stays in view */
+.quotes-dialog-body {
+  height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.quote-item {
+  position: relative;
+  padding: 12px 34px 12px 0;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.quote-item:last-child {
+  border-bottom: none;
+}
+
+.quote-item-text {
+  margin: 0 0 8px 0;
+  padding: 5px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  border-left: 3px solid var(--quote-rule);
+  background-color: var(--fullscreen-canvas-bg);
+}
+
+.quote-item-note {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--color-fg-default);
+}
+
+.quote-item-hint {
+  font-size: 11px;
+  margin-bottom: 8px;
+  color: var(--quote-muted-fg);
+}
+
+.quote-item-orphan .quote-item-text {
+  border-left-color: var(--color-border-default);
+  opacity: 0.7;
+}
+
+.quote-item-remove {
+  position: absolute;
+  top: 12px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  cursor: pointer;
+  color: var(--quote-muted-fg);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.quote-item-remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+.quote-item-remove:hover {
+  color: var(--color-fg-default);
+  border-color: var(--color-border-default);
+  background-color: var(--color-btn-hover-bg);
+}
+
+.quotes-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-default);
 }
 

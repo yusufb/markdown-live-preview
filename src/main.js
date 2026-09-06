@@ -254,10 +254,13 @@ const init = () => {
         fullscreenPreviewMaxWidth: 'mlp.fullscreenPreviewMaxWidth',
         dividerRatio: 'mlp.dividerRatio',
         editorCollapsed: 'mlp.editorCollapsed',
+        quoteMode: 'mlp.quoteMode',
         tabContent: (id) => 'mlp.tab.' + id,
         tabContentPrefix: 'mlp.tab.',
         tabScroll: (id) => 'mlp.tabScroll.' + id,
         tabScrollPrefix: 'mlp.tabScroll.',
+        tabQuotes: (id) => 'mlp.quotes.' + id,
+        tabQuotesPrefix: 'mlp.quotes.',
     };
 
     const readJSON = (key) => {
@@ -472,6 +475,8 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         const output = document.querySelector('#output');
         output.innerHTML = sanitized;
         renderMermaidDiagrams(output);
+        hideSelectionButton();
+        applyQuoteHighlights(output);
     };
 
     let presetValue = (value) => {
@@ -534,8 +539,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         localStorage.removeItem(STORAGE.tabScroll(tabId));
     };
 
-    // Delete any mlp.tab.<id> or mlp.tabScroll.<id> entries whose id is not in the live tabs list.
-    // Runs once at startup as a safe sweep for orphans left by crashes or aborted closes.
+    // scratch tabs are identified by a crypto.randomUUID(), file tabs by their path
+    const SCRATCH_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     let cleanupOrphanScratchContent = () => {
         const liveIds = new Set(tabs.map((t) => t.id));
         const toRemove = [];
@@ -548,6 +554,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             } else if (key.startsWith(STORAGE.tabScrollPrefix)) {
                 const id = key.slice(STORAGE.tabScrollPrefix.length);
                 if (!liveIds.has(id)) toRemove.push(key);
+            } else if (key.startsWith(STORAGE.tabQuotesPrefix)) {
+                const id = key.slice(STORAGE.tabQuotesPrefix.length);
+                if (!liveIds.has(id) && SCRATCH_ID_PATTERN.test(id)) toRemove.push(key);
             }
         }
         toRemove.forEach((k) => localStorage.removeItem(k));
@@ -687,6 +696,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                 await writeFileContent(savePath, content);
                 let oldId = tab.id;
                 removeScratchContent(oldId);
+                migrateQuotes(oldId, savePath);
                 tab.filePath = savePath;
                 tab.label = filename;
                 tab.id = savePath;
@@ -758,6 +768,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                 presetValue(result.content);
                 // update tab if path was normalised by server
                 if (result.resolvedPath !== tab.filePath) {
+                    migrateQuotes(tab.id, result.resolvedPath);
                     tab.filePath = result.resolvedPath;
                     tab.id = result.resolvedPath;
                     tab.label = getFilename(result.resolvedPath);
@@ -781,6 +792,10 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         document.title = tab.label + ' - Markdown Live Preview';
         saveTabList();
         renderTabs();
+
+        hideSelectionButton();
+        refreshQuoteHighlights();
+        refreshQuotesButton();
 
         let savedScroll = loadTabScroll(activeTabId);
         if (savedScroll != null) {
@@ -846,9 +861,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             }
         }
 
-        // clean up scratch content
         if (!tab.filePath) {
             removeScratchContent(tab.id);
+            removeQuotes(tab.id);
         }
         removeTabScroll(tab.id);
 
@@ -1002,6 +1017,543 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             if (monaco && monaco.editor && typeof monaco.editor.setTheme === 'function') {
                 monaco.editor.setTheme(checked ? 'vs-dark' : 'vs');
             }
+        });
+    };
+
+    // ----- quotation mode -----
+    //
+    // A quote is stored as text rather than as a DOM reference, because convert() rebuilds the
+    // whole preview on every keystroke. Each render re-finds the text and re-applies the marks.
+
+    let quoteModeEnabled = false;
+    // quote id -> start offset in the flattened preview text, from the last highlight pass.
+    // Doubles as the sort key, so the list and the clipboard follow document order.
+    let quoteOffsets = new Map();
+    let pendingSelection = null;
+    let selectionCheckQueued = false;
+
+    let loadQuotes = (tabId) => {
+        if (!tabId) return [];
+        let data = readJSON(STORAGE.tabQuotes(tabId));
+        return Array.isArray(data) ? data : [];
+    };
+
+    let saveQuotes = (tabId, quotes) => {
+        try {
+            if (quotes.length === 0) {
+                localStorage.removeItem(STORAGE.tabQuotes(tabId));
+            } else {
+                writeJSON(STORAGE.tabQuotes(tabId), quotes);
+            }
+            return true;
+        } catch (err) {
+            customAlert('Failed to save quotation: ' + err.message);
+            return false;
+        }
+    };
+
+    let removeQuotes = (tabId) => {
+        localStorage.removeItem(STORAGE.tabQuotes(tabId));
+    };
+
+    // Follows a tab whose id changes (scratch saved to a file, or a path normalised by the server).
+    // An existing set under the target id wins, so reopening a file never clobbers its own quotes.
+    let migrateQuotes = (fromId, toId) => {
+        if (!fromId || !toId || fromId === toId) return;
+        let raw = localStorage.getItem(STORAGE.tabQuotes(fromId));
+        if (raw == null) return;
+        if (localStorage.getItem(STORAGE.tabQuotes(toId)) == null) {
+            localStorage.setItem(STORAGE.tabQuotes(toId), raw);
+        }
+        localStorage.removeItem(STORAGE.tabQuotes(fromId));
+    };
+
+    let isInsideExcludedSubtree = (node) => {
+        let el = (node && node.nodeType === Node.ELEMENT_NODE) ? node : (node ? node.parentElement : null);
+        for (; el; el = el.parentElement) {
+            let tag = el.tagName ? el.tagName.toLowerCase() : '';
+            if (tag === 'svg' || tag === 'script' || tag === 'style') return true;
+            if (el.classList && (el.classList.contains('mermaid') || el.classList.contains('katex-mathml'))) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // Flatten the preview's text nodes into one string, keeping each node's span so a character
+    // offset can be mapped back to a (node, offset) pair.
+    let buildTextIndex = (root) => {
+        let nodes = [];
+        let text = '';
+        let walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) => {
+                if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+                return isInsideExcludedSubtree(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            nodes.push({ node: node, start: text.length, end: text.length + node.nodeValue.length });
+            text += node.nodeValue;
+        }
+        return { text: text, nodes: nodes };
+    };
+
+    // selection.toString() collapses rendered whitespace and inserts newlines at block boundaries,
+    // so it never matches the raw DOM text literally. Both sides go through this, and map[] carries
+    // each normalised character back to its raw index.
+    let normaliseText = (raw) => {
+        let text = '';
+        let map = [];
+        let pendingSpace = false;
+        for (let i = 0; i < raw.length; i++) {
+            let ch = raw[i];
+            if (/[\s\u00a0]/.test(ch)) {
+                if (text.length > 0) pendingSpace = true;
+                continue;
+            }
+            if (pendingSpace) {
+                text += ' ';
+                map.push(i);
+                pendingSpace = false;
+            }
+            text += ch;
+            map.push(i);
+        }
+        return { text: text, map: map };
+    };
+
+    let findNthOccurrence = (haystack, needle, n) => {
+        let at = -1;
+        let from = 0;
+        for (let i = 0; i <= n; i++) {
+            at = haystack.indexOf(needle, from);
+            if (at === -1) break;
+            from = at + 1;
+        }
+        return at;
+    };
+
+    let rawOffsetOf = (index, container, offset) => {
+        if (!container) return null;
+        if (container.nodeType === Node.TEXT_NODE) {
+            let entry = index.nodes.find((e) => e.node === container);
+            return entry ? entry.start + offset : null;
+        }
+        // an element container's offset is a child index, so use the first indexed text node in it
+        let child = container.childNodes[offset];
+        if (!child) return null;
+        let entry = index.nodes.find((e) => e.node === child || child.contains(e.node));
+        return entry ? entry.start : null;
+    };
+
+    // Which copy of a repeated phrase this selection is, so the mark re-anchors to the right one.
+    let selectionOccurrence = (range, selectedText) => {
+        let output = document.querySelector('#output');
+        if (!output) return 0;
+        let index = buildTextIndex(output);
+        let haystack = normaliseText(index.text);
+        let needle = normaliseText(selectedText);
+        if (!needle.text) return 0;
+
+        let rawStart = rawOffsetOf(index, range.startContainer, range.startOffset);
+        if (rawStart == null) return 0;
+        let normStart = haystack.map.findIndex((rawIndex) => rawIndex >= rawStart);
+        if (normStart === -1) return 0;
+
+        let count = 0;
+        let from = 0;
+        for (;;) {
+            let at = haystack.text.indexOf(needle.text, from);
+            if (at === -1 || at >= normStart) break;
+            count++;
+            from = at + 1;
+        }
+        return count;
+    };
+
+    let mergeIntervals = (intervals) => {
+        let merged = [];
+        intervals.slice().sort((a, b) => a.start - b.start).forEach((interval) => {
+            let last = merged[merged.length - 1];
+            if (last && interval.start <= last.end) {
+                last.end = Math.max(last.end, interval.end);
+            } else {
+                merged.push({ start: interval.start, end: interval.end });
+            }
+        });
+        return merged;
+    };
+
+    // Applied back to front so splitting a text node never invalidates an earlier interval's
+    // offsets: every remaining interval lies in the retained prefix of whatever was split.
+    let wrapIntervals = (index, intervals) => {
+        for (let i = intervals.length - 1; i >= 0; i--) {
+            let interval = intervals[i];
+            for (let j = index.nodes.length - 1; j >= 0; j--) {
+                let entry = index.nodes[j];
+                let from = Math.max(interval.start, entry.start);
+                let to = Math.min(interval.end, entry.end);
+                if (to <= from) continue;
+
+                let node = entry.node;
+                let localEnd = to - entry.start;
+                let localStart = from - entry.start;
+                // a range spanning blocks also covers the whitespace between them; marking that
+                // would leave a stray underline with nothing under it
+                if (!/\S/.test(node.nodeValue.slice(localStart, localEnd))) continue;
+                if (localEnd < node.nodeValue.length) node.splitText(localEnd);
+                let covered = localStart > 0 ? node.splitText(localStart) : node;
+
+                let parent = covered.parentNode;
+                if (!parent) continue;
+                let mark = document.createElement('mark');
+                mark.className = 'mlp-quote';
+                parent.replaceChild(mark, covered);
+                mark.appendChild(covered);
+            }
+        }
+    };
+
+    let clearQuoteHighlights = (root) => {
+        let marks = root.querySelectorAll('mark.mlp-quote');
+        marks.forEach((mark) => {
+            let parent = mark.parentNode;
+            if (!parent) return;
+            while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+            parent.removeChild(mark);
+        });
+        if (marks.length > 0) root.normalize();
+    };
+
+    // Resolve every quote of the active tab to a range in the flattened preview text, record the
+    // start offsets for ordering, then wrap the merged ranges in <mark>.
+    let applyQuoteHighlights = (root) => {
+        quoteOffsets = new Map();
+        if (!root || !quoteModeEnabled) return;
+
+        let quotes = loadQuotes(activeTabId);
+        if (quotes.length === 0) return;
+
+        let index = buildTextIndex(root);
+        if (!index.text) return;
+        let haystack = normaliseText(index.text);
+
+        let intervals = [];
+        quotes.forEach((quote) => {
+            let needle = normaliseText(String(quote.text || ''));
+            if (!needle.text) return;
+            let at = findNthOccurrence(haystack.text, needle.text, quote.occurrence || 0);
+            if (at === -1) at = haystack.text.indexOf(needle.text);
+            if (at === -1) return;
+
+            let start = haystack.map[at];
+            let end = haystack.map[at + needle.text.length - 1] + 1;
+            quoteOffsets.set(quote.id, start);
+            intervals.push({ start: start, end: end });
+        });
+
+        wrapIntervals(index, mergeIntervals(intervals));
+    };
+
+    let refreshQuoteHighlights = () => {
+        let output = document.querySelector('#output');
+        if (!output) return;
+        clearQuoteHighlights(output);
+        applyQuoteHighlights(output);
+    };
+
+    // ----- quotation: selection button -----
+
+    let hideSelectionButton = () => {
+        pendingSelection = null;
+        let button = document.querySelector('#quote-selection-button');
+        if (button) button.hidden = true;
+    };
+
+    let previewSelection = () => {
+        let output = document.querySelector('#output');
+        let selection = window.getSelection();
+        if (!output || !selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+        if (!selection.toString().trim()) return null;
+        if (!output.contains(selection.anchorNode) || !output.contains(selection.focusNode)) return null;
+
+        let range = selection.getRangeAt(0);
+        if (isInsideExcludedSubtree(range.commonAncestorContainer)) return null;
+        return { text: selection.toString(), range: range.cloneRange() };
+    };
+
+    let positionSelectionButton = () => {
+        let button = document.querySelector('#quote-selection-button');
+        let previewElement = document.querySelector('#preview');
+        if (!button || !previewElement || !pendingSelection) return;
+
+        let rect = pendingSelection.range.getBoundingClientRect();
+        if (!rect || (rect.width === 0 && rect.height === 0)) {
+            hideSelectionButton();
+            return;
+        }
+
+        let pane = previewElement.getBoundingClientRect();
+        if (rect.bottom < pane.top || rect.top > pane.bottom) {
+            button.hidden = true;
+            return;
+        }
+
+        button.hidden = false;
+        let width = button.offsetWidth;
+        let height = button.offsetHeight;
+        let left = Math.min(Math.max(rect.right - width, pane.left + 4), pane.right - width - 4);
+        let top = Math.max(rect.top - height - 4, pane.top + 4);
+        button.style.left = left + 'px';
+        button.style.top = top + 'px';
+    };
+
+    let scheduleSelectionCheck = () => {
+        if (selectionCheckQueued) return;
+        selectionCheckQueued = true;
+        requestAnimationFrame(() => {
+            selectionCheckQueued = false;
+            if (!quoteModeEnabled) {
+                hideSelectionButton();
+                return;
+            }
+            let found = previewSelection();
+            if (!found) {
+                hideSelectionButton();
+                return;
+            }
+            pendingSelection = found;
+            positionSelectionButton();
+        });
+    };
+
+    // ----- quotation: dialogs -----
+
+    const promptQuoteNote = (selectedText) => {
+        return new Promise((resolve) => {
+            const dialog = document.createElement('dialog');
+            dialog.className = 'custom-dialog quote-dialog';
+            dialog.innerHTML = `
+                <div class="dialog-container">
+                    <h3 class="quote-dialog-title">Add quotation</h3>
+                    <blockquote class="quote-dialog-selection">${escapeHtml(selectedText)}</blockquote>
+                    <div class="dialog-input-container">
+                        <textarea id="quote-note-input" class="dialog-input quote-note-input" rows="5" placeholder="Add a note"></textarea>
+                    </div>
+                    <div class="dialog-actions">
+                        <button id="cancel" class="dialog-button dialog-button-default">Cancel</button>
+                        <button id="save" class="dialog-button dialog-button-primary">Save</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(dialog);
+            dialog.showModal();
+
+            const input = dialog.querySelector('#quote-note-input');
+            input.focus();
+
+            const onCancel = () => { resolve(null); dialog.close(); dialog.remove(); };
+
+            // a quotation without a note is pointless, so Save stays inert until there is one
+            dialog.querySelector('#save').onclick = () => {
+                const note = input.value.trim();
+                if (!note) return;
+                resolve(note);
+                dialog.close();
+                dialog.remove();
+            };
+            dialog.querySelector('#cancel').onclick = onCancel;
+            dialog.onclose = onCancel;
+        });
+    };
+
+    let addQuoteFromSelection = async (captured) => {
+        let tabId = activeTabId;
+        if (!tabId) return;
+
+        // resolved before the dialog opens, while the range is still known to be live
+        let occurrence = selectionOccurrence(captured.range, captured.text);
+        let note = await promptQuoteNote(captured.text);
+        if (note === null) return;
+
+        let quotes = loadQuotes(tabId);
+        quotes.push({ id: crypto.randomUUID(), text: captured.text, note: note, occurrence: occurrence });
+        if (!saveQuotes(tabId, quotes)) return;
+
+        let selection = window.getSelection();
+        if (selection) selection.removeAllRanges();
+        refreshQuoteHighlights();
+        refreshQuotesButton();
+    };
+
+    // a quote nested inside another starts at the same character, so the wider one comes first.
+    // Quotes that could not be located in the current document have no offset and sort last.
+    let sortQuotes = (quotes) => {
+        return quotes.slice().sort((a, b) => {
+            let aAt = quoteOffsets.has(a.id) ? quoteOffsets.get(a.id) : Infinity;
+            let bAt = quoteOffsets.has(b.id) ? quoteOffsets.get(b.id) : Infinity;
+            if (aAt !== bAt) return aAt - bAt;
+            return String(b.text || '').length - String(a.text || '').length;
+        });
+    };
+
+    const BIN_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+    let removeQuote = (quoteId) => {
+        let tabId = activeTabId;
+        let quotes = loadQuotes(tabId).filter((q) => q.id !== quoteId);
+        if (!saveQuotes(tabId, quotes)) return;
+
+        refreshQuoteHighlights();
+        refreshQuotesButton();
+
+        let dialog = document.querySelector('#quotes-dialog');
+        if (quotes.length === 0) {
+            if (dialog && dialog.open) dialog.close();
+            return;
+        }
+        renderQuotesList();
+    };
+
+    let renderQuotesList = () => {
+        let body = document.querySelector('#quotes-dialog-body');
+        let count = document.querySelector('#quotes-dialog-count');
+        if (!body) return;
+
+        let quotes = sortQuotes(loadQuotes(activeTabId));
+        if (count) count.textContent = String(quotes.length);
+        body.innerHTML = '';
+
+        quotes.forEach((quote) => {
+            let located = quoteOffsets.has(quote.id);
+            let item = document.createElement('div');
+            item.className = 'quote-item' + (located ? '' : ' quote-item-orphan');
+
+            let text = document.createElement('blockquote');
+            text.className = 'quote-item-text';
+            text.textContent = quote.text;
+            item.appendChild(text);
+
+            if (!located) {
+                let hint = document.createElement('div');
+                hint.className = 'quote-item-hint';
+                hint.textContent = 'Not found in the current document';
+                item.appendChild(hint);
+            }
+
+            let note = document.createElement('div');
+            note.className = 'quote-item-note';
+            note.textContent = quote.note;
+            item.appendChild(note);
+
+            let remove = document.createElement('button');
+            remove.className = 'quote-item-remove';
+            remove.type = 'button';
+            remove.title = 'Remove quotation';
+            remove.innerHTML = BIN_ICON;
+            remove.addEventListener('click', () => removeQuote(quote.id));
+            item.appendChild(remove);
+
+            body.appendChild(item);
+        });
+    };
+
+    // blank lines around the selection go, but the first line keeps its indentation, which
+    // matters when the quote came out of a code block
+    let formatQuotesForClipboard = (quotes) => {
+        return quotes.map((quote) => {
+            let quoted = String(quote.text).replace(/^[\r\n]+/, '').replace(/\s+$/, '').split('\n')
+                .map((line) => (line.trim() === '' ? '>' : '> ' + line))
+                .join('\n');
+            return quoted + '\n' + quote.note;
+        }).join('\n\n');
+    };
+
+    let refreshQuotesButton = () => {
+        let button = document.querySelector('#quotes-open-button');
+        if (!button) return;
+        let quotes = quoteModeEnabled ? loadQuotes(activeTabId) : [];
+        let badge = button.querySelector('.quotes-badge');
+        if (badge) badge.textContent = String(quotes.length);
+        button.hidden = quotes.length === 0;
+    };
+
+    let setupQuotationMode = () => {
+        let selectionButton = document.querySelector('#quote-selection-button');
+        let openButton = document.querySelector('#quotes-open-button');
+        let dialog = document.querySelector('#quotes-dialog');
+        let copyButton = document.querySelector('#quotes-copy-button');
+        let previewElement = document.querySelector('#preview');
+
+        document.addEventListener('selectionchange', scheduleSelectionCheck);
+        if (previewElement) previewElement.addEventListener('scroll', positionSelectionButton);
+        window.addEventListener('resize', positionSelectionButton);
+
+        if (selectionButton) {
+            // keep the selection alive: a plain mousedown on the button would collapse it
+            selectionButton.addEventListener('mousedown', (event) => event.preventDefault());
+            selectionButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                let captured = pendingSelection;
+                if (!captured) return;
+                hideSelectionButton();
+                addQuoteFromSelection(captured);
+            });
+        }
+
+        if (openButton && dialog) {
+            openButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                renderQuotesList();
+                dialog.showModal();
+            });
+
+            // close on clicking the backdrop rather than the dialog itself
+            dialog.addEventListener('click', (event) => {
+                const rect = dialog.getBoundingClientRect();
+                const isInDialog = (
+                    rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+                    rect.left <= event.clientX && event.clientX <= rect.left + rect.width
+                );
+                if (!isInDialog) dialog.close();
+            });
+        }
+
+        if (copyButton) {
+            copyButton.addEventListener('click', async () => {
+                let quotes = sortQuotes(loadQuotes(activeTabId));
+                if (quotes.length === 0) return;
+                try {
+                    await navigator.clipboard.writeText(formatQuotesForClipboard(quotes));
+                    copyButton.textContent = 'Copied';
+                    setTimeout(() => { copyButton.textContent = 'Copy all'; }, 1200);
+                } catch (err) {
+                    await customAlert('Could not copy to clipboard: ' + err.message);
+                }
+            });
+        }
+    };
+
+    let initQuoteModeToggle = (settings) => {
+        quoteModeEnabled = settings;
+        refreshQuoteHighlights();
+        refreshQuotesButton();
+
+        let checkbox = document.querySelector('#quote-mode-checkbox');
+        if (!checkbox) return;
+        checkbox.checked = settings;
+
+        // toggling only changes what is shown; no stored quotation is touched either way
+        checkbox.addEventListener('change', (event) => {
+            quoteModeEnabled = event.currentTarget.checked;
+            saveQuoteModeSettings(quoteModeEnabled);
+            if (!quoteModeEnabled) {
+                hideSelectionButton();
+                let dialog = document.querySelector('#quotes-dialog');
+                if (dialog && dialog.open) dialog.close();
+            }
+            refreshQuoteHighlights();
+            refreshQuotesButton();
         });
     };
 
@@ -1174,6 +1726,14 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         localStorage.setItem(STORAGE.fullscreenPreviewMaxWidth, String(value));
     };
 
+    let loadQuoteModeSettings = () => {
+        return localStorage.getItem(STORAGE.quoteMode) === 'true';
+    };
+
+    let saveQuoteModeSettings = (enabled) => {
+        localStorage.setItem(STORAGE.quoteMode, String(enabled));
+    };
+
     let loadThemeSettings = () => {
         return localStorage.getItem(STORAGE.theme) === 'dark';
     };
@@ -1304,6 +1864,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     setupClipboardHashTrigger();
     setupSettingsButton();
     setupFilePathInput();
+    setupQuotationMode();
 
     // initialise tabs
     let initialTabReady;
@@ -1334,6 +1895,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     initFullscreenMaxWidthSetting(loadFullscreenMaxWidthSettings());
     initFullWidthToggle(loadFullWidthSettings());
     initThemeToggle(loadThemeSettings());
+    initQuoteModeToggle(loadQuoteModeSettings());
 
     setupDivider();
 

@@ -111,6 +111,39 @@
                     </div>
                     <span class="settings-option-desc">Maximum width of preview content in collapsed mode</span>
                 </div>
+                <div class="settings-option">
+                    <label class="settings-option-label" for="quote-mode-checkbox">
+                        <input type="checkbox" id="quote-mode-checkbox">
+                        <span class="settings-option-title">Quotation mode</span>
+                    </label>
+                    <span class="settings-option-desc">Select text in the preview to save it as a quotation with a note</span>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <button id="quote-selection-button" class="quote-fab" type="button" title="Save as quotation" hidden>
+        <svg class="quote-icon" viewBox="0 0 16.3 13" fill="currentColor" aria-hidden="true">
+            <path d="M0 0H7V13H3.85C3.85 9.77 2.13 7.15 0 7.15ZM9.3 0H16.3V13H13.15C13.15 9.77 11.43 7.15 9.3 7.15Z"/>
+        </svg>
+    </button>
+
+    <button id="quotes-open-button" class="quote-fab" type="button" title="Quotations" hidden>
+        <svg class="quote-icon" viewBox="0 0 16.3 13" fill="currentColor" aria-hidden="true">
+            <path d="M0 0H7V13H3.85C3.85 9.77 2.13 7.15 0 7.15ZM9.3 0H16.3V13H13.15C13.15 9.77 11.43 7.15 9.3 7.15Z"/>
+        </svg>
+        <span class="quotes-badge">0</span>
+    </button>
+
+    <dialog id="quotes-dialog" class="custom-dialog quotes-dialog">
+        <div class="dialog-container quotes-dialog-container">
+            <div class="quotes-dialog-header">
+                <h3 class="quotes-dialog-title">Quotations</h3>
+                <span id="quotes-dialog-count" class="quotes-dialog-count">0</span>
+            </div>
+            <div id="quotes-dialog-body" class="quotes-dialog-body"></div>
+            <div class="quotes-dialog-footer">
+                <button id="quotes-copy-button" class="dialog-button dialog-button-default" type="button">Copy all</button>
             </div>
         </div>
     </dialog>
