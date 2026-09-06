@@ -281,6 +281,7 @@ const init = () => {
     let activeTabId = null;
     let dirtyTabs = new Set();
     let suppressDirty = false;
+    let suppressScrollSave = false;
     // default template
     const defaultInput = `# Markdown syntax guide
 
@@ -439,7 +440,7 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         let previewElement = document.querySelector('#preview');
         previewElement.addEventListener('scroll', () => {
-            if (activeTabId) {
+            if (activeTabId && !suppressScrollSave) {
                 saveTabScroll(activeTabId, previewElement.scrollTop);
             }
 
@@ -762,6 +763,15 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         let tab = getActiveTab();
         if (!tab) return;
 
+        // Read the saved scroll position BEFORE presetValue, because
+        // presetValue -> editor.revealPosition -> sync-scroll fires the
+        // preview scroll listener which would overwrite the stored value.
+        let savedScroll = loadTabScroll(activeTabId);
+
+        // Suppress scroll saves while we load content and restore position,
+        // so sync-scroll side-effects don't clobber the saved value.
+        suppressScrollSave = true;
+
         if (tab.filePath) {
             try {
                 let result = await fetchFileContent(tab.filePath);
@@ -773,6 +783,8 @@ This web site is using ${"`"}markedjs/marked${"`"}.
                     tab.id = result.resolvedPath;
                     tab.label = getFilename(result.resolvedPath);
                     activeTabId = result.resolvedPath;
+                    // Re-read scroll under the resolved ID in case it differs
+                    savedScroll = loadTabScroll(activeTabId);
                     saveTabList();
                 }
             } catch (err) {
@@ -797,12 +809,20 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         refreshQuoteHighlights();
         refreshQuotesButton();
 
-        let savedScroll = loadTabScroll(activeTabId);
         if (savedScroll != null) {
-            requestAnimationFrame(() => {
-                let previewEl = document.querySelector('#preview');
-                if (previewEl) previewEl.scrollTop = savedScroll;
-            });
+            // setTimeout defers past any synchronous init code that runs after
+            // switchToTab returns (e.g. setupDivider changing pane widths), and
+            // the inner RAF ensures the browser has completed layout before we
+            // set the scroll position.
+            setTimeout(() => {
+                requestAnimationFrame(() => {
+                    let previewEl = document.querySelector('#preview');
+                    if (previewEl) previewEl.scrollTop = savedScroll;
+                    suppressScrollSave = false;
+                });
+            }, 0);
+        } else {
+            suppressScrollSave = false;
         }
     };
 
