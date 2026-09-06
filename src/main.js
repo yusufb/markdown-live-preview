@@ -62,6 +62,33 @@ const customConfirm = (message, confirmText = 'Confirm', cancelText = 'Cancel') 
     });
 };
 
+// Three-way save prompt: resolves 'save', 'discard' or 'cancel'.
+// Escape and backdrop-close resolve 'cancel', so nothing is lost by dismissing it.
+const customSaveConfirm = (message, saveText = 'Save', discardText = 'Don\'t Save') => {
+    return new Promise((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'custom-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-container">
+                <p class="dialog-message">${escapeHtml(message)}</p>
+                <div class="dialog-actions">
+                    <button id="cancel" class="dialog-button dialog-button-default dialog-button-left">Cancel</button>
+                    <button id="discard" class="dialog-button dialog-button-default">${escapeHtml(discardText)}</button>
+                    <button id="save" class="dialog-button dialog-button-primary">${escapeHtml(saveText)}</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(dialog);
+        dialog.showModal();
+
+        const closeWith = (choice) => { resolve(choice); dialog.close(); dialog.remove(); };
+        dialog.querySelector('#save').onclick = () => closeWith('save');
+        dialog.querySelector('#discard').onclick = () => closeWith('discard');
+        dialog.querySelector('#cancel').onclick = () => closeWith('cancel');
+        dialog.onclose = () => closeWith('cancel');
+    });
+};
+
 const customPrompt = (message, defaultValue = '') => {
     return new Promise((resolve) => {
         const dialog = document.createElement('dialog');
@@ -693,8 +720,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!tab) return true;
 
         if (tab.filePath && dirtyTabs.has(tabId)) {
-            let save = await customConfirm('Save changes to ' + tab.label + '?', 'Save', 'Don\'t Save');
-            if (save) {
+            let choice = await customSaveConfirm('Save changes to ' + tab.label + '?');
+            if (choice === 'cancel') return false;
+            if (choice === 'save') {
                 try {
                     await writeFileContent(tab.filePath, editor.getValue());
                     dirtyTabs.delete(tabId);
@@ -795,8 +823,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         // check dirty state for file tabs
         if (dirtyTabs.has(tabId) && tab.filePath) {
-            let save = await customConfirm('Save changes to ' + tab.label + '?', 'Save', 'Don\'t Save');
-            if (save) {
+            let choice = await customSaveConfirm('Save changes to ' + tab.label + '?');
+            if (choice === 'cancel') return;
+            if (choice === 'save') {
                 try {
                     await writeFileContent(tab.filePath, editor.getValue());
                 } catch (err) {
@@ -809,8 +838,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         // check scratch tabs with content
         if (!tab.filePath && scratchHasContent(tabId)) {
-            let save = await customConfirm('Save content of ' + tab.label + '?', 'Save', 'Don\'t Save');
-            if (save) {
+            let choice = await customSaveConfirm('Save content of ' + tab.label + '?');
+            if (choice === 'cancel') return;
+            if (choice === 'save') {
                 let success = await saveTab(tabId);
                 if (!success) return; // Abort closing if save failed or was cancelled
             }
@@ -983,8 +1013,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         if (!current || !current.filePath) return;
 
         if (dirtyTabs.has(current.id)) {
-            let save = await customConfirm('Save changes to ' + current.label + ' before refreshing?', 'Save', 'Don\'t Save');
-            if (save) {
+            let choice = await customSaveConfirm('Save changes to ' + current.label + ' before refreshing?');
+            if (choice === 'cancel') return;
+            if (choice === 'save') {
                 try {
                     await writeFileContent(current.filePath, editor.getValue());
                 } catch (err) {

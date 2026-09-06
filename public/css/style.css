@@ -470,6 +470,11 @@ dialog.custom-dialog::backdrop {
   gap: 8px;
 }
 
+/* pushes a button to the left edge of the flex-end action row */
+.dialog-button-left {
+  margin-right: auto;
+}
+
 .dialog-button {
   padding: 5px 16px;
   font-size: 14px;
